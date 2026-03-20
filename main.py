@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List
 
 import io
+import modal
 import fal_client
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
@@ -18,9 +19,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Strip any trailing whitespace/newlines from FAL_KEY (common copy-paste issue)
+# Strip any trailing whitespace/newlines from keys (common copy-paste issue)
 if os.getenv("FAL_KEY"):
     os.environ["FAL_KEY"] = os.environ["FAL_KEY"].strip()
+if os.getenv("MODAL_TOKEN_ID"):
+    os.environ["MODAL_TOKEN_ID"] = os.environ["MODAL_TOKEN_ID"].strip()
+if os.getenv("MODAL_TOKEN_SECRET"):
+    os.environ["MODAL_TOKEN_SECRET"] = os.environ["MODAL_TOKEN_SECRET"].strip()
 
 app = FastAPI(title="ref2vid")
 
@@ -33,6 +38,9 @@ app.add_middleware(
 
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
+
+VIDEOS_DIR = Path("/tmp/videos")
+VIDEOS_DIR.mkdir(exist_ok=True)
 
 
 def sse(data: dict) -> str:
@@ -176,9 +184,14 @@ async def generate(
     motion_strength: float = Form(default=0.5),
     model: str = Form(default="wan"),
 ):
-    if not os.getenv("FAL_KEY"):
+    if use_kling and not os.getenv("FAL_KEY"):
         async def err():
-            yield sse({"status": "error", "message": "FAL_KEY not set. Add it to your .env file."})
+            yield sse({"status": "error", "message": "FAL_KEY not set. Required for Kling model."})
+        return StreamingResponse(err(), media_type="text/event-stream")
+
+    if not use_kling and not os.getenv("MODAL_TOKEN_ID"):
+        async def err():
+            yield sse({"status": "error", "message": "MODAL_TOKEN_ID not set. Required for WAN model."})
         return StreamingResponse(err(), media_type="text/event-stream")
 
     if len(images) < 1 or len(images) > 6:
@@ -218,15 +231,16 @@ async def generate(
 
     async def event_stream():
         try:
-            yield sse({"status": "uploading", "message": "Uploading reference image to fal storage…"})
             primary_img = sorted_images[0]
             suffix = os.path.splitext(primary_img.filename or ".jpg")[1] or ".jpg"
             content = await primary_img.read()
-            primary_url = await upload_image(content, suffix)
-
-            yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
 
             if use_kling:
+                # ── Kling via fal.ai ──────────────────────────────────────────
+                yield sse({"status": "uploading", "message": "Uploading image to fal storage…"})
+                primary_url = await upload_image(content, suffix)
+                yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
+
                 fal_endpoint = "fal-ai/kling-video/v1.6/standard/elements"
                 arguments = {
                     "prompt": full_prompt,
@@ -238,75 +252,101 @@ async def generate(
                     "cfg_scale": cfg_scale,
                     "enable_safety_checker": False,
                 }
+
+                result = None
+                for attempt in range(3):
+                    try:
+                        handle = await fal_client.submit_async(fal_endpoint, arguments=arguments)
+                        yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id, "progress": 25})
+
+                        logs_seen = 0
+                        async for event in handle.iter_events(with_logs=True):
+                            if isinstance(event, fal_client.Queued):
+                                yield sse({
+                                    "status": "queued",
+                                    "message": f"Position in queue: {event.position}",
+                                    "position": event.position,
+                                    "progress": 25,
+                                })
+                            elif isinstance(event, (fal_client.InProgress, fal_client.Completed)):
+                                new_logs = event.logs[logs_seen:]
+                                logs_seen = len(event.logs)
+                                for log in new_logs:
+                                    yield sse({"status": "processing", "message": log.get("message", ""), "progress": -1})
+
+                        result = await handle.get()
+                        break
+                    except Exception as e:
+                        err_str = str(e)
+                        if "downstream_service_error" in err_str and attempt < 2:
+                            wait = 2 ** attempt
+                            yield sse({"status": "queued", "message": f"Model error, retrying in {wait}s… (attempt {attempt+2}/3)", "progress": 20})
+                            await asyncio.sleep(wait)
+                        else:
+                            raise
+                if result is None:
+                    raise RuntimeError(
+                        "The model failed after 3 attempts (downstream_service_error). "
+                        "Try a different prompt or image."
+                    )
+
+                video = result.get("video") or (result.get("videos") or [None])[0]
+                if not video:
+                    yield sse({"status": "error", "message": f"Unexpected response shape: {list(result.keys())}"})
+                    return
+
+                video_url = video.get("url") if isinstance(video, dict) else str(video)
+                yield sse({
+                    "status": "complete",
+                    "message": "Video ready!",
+                    "video_url": video_url,
+                    "prompt_used": full_prompt,
+                    "progress": 100,
+                })
+
             else:
-                fal_endpoint = "wan/v2.6/reference-to-video"
-                arguments = {
-                    "prompt": full_prompt,
-                    "negative_prompt": negative_prompt,
-                    "image_urls": [primary_url],
-                    "aspect_ratio": aspect_ratio,
-                    "resolution": resolution,
-                    "duration": str(duration),
-                    "multi_shots": False,
-                    "enable_audio": False,
-                }
+                # ── WAN via Modal ─────────────────────────────────────────────
+                yield sse({"status": "uploading", "message": "Preparing image…"})
+                compressed, _ = await asyncio.to_thread(compress_image, content, suffix)
 
-            result = None
-            for attempt in range(3):
-                try:
-                    handle = await fal_client.submit_async(fal_endpoint, arguments=arguments)
-                    yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id, "progress": 25})
+                yield sse({"status": "submitted", "message": "Submitting to Modal…", "progress": 20})
+                yield sse({"status": "processing", "message": "Generating video on GPU…", "progress": 35})
 
-                    logs_seen = 0
-                    async for event in handle.iter_events(with_logs=True):
-                        if isinstance(event, fal_client.Queued):
-                            yield sse({
-                                "status": "queued",
-                                "message": f"Position in queue: {event.position}",
-                                "position": event.position,
-                                "progress": 25,
-                            })
-                        elif isinstance(event, (fal_client.InProgress, fal_client.Completed)):
-                            new_logs = event.logs[logs_seen:]
-                            logs_seen = len(event.logs)
-                            for log in new_logs:
-                                yield sse({"status": "processing", "message": log.get("message", ""), "progress": -1})
-
-                    result = await handle.get()
-                    break
-                except Exception as e:
-                    err_str = str(e)
-                    if "downstream_service_error" in err_str and attempt < 2:
-                        wait = 2 ** attempt
-                        yield sse({"status": "queued", "message": f"Model error, retrying in {wait}s… (attempt {attempt+2}/3)", "progress": 20})
-                        await asyncio.sleep(wait)
-                    else:
-                        raise
-            if result is None:
-                raise RuntimeError(
-                    "The model failed after 3 attempts (downstream_service_error). "
-                    "This is often caused by the safety checker rejecting the prompt or image. "
-                    "Try a different prompt or image."
+                WanGenerator = modal.Cls.from_name("ref2vid-wan", "WanGenerator")
+                video_bytes = await asyncio.to_thread(
+                    WanGenerator().generate.remote,
+                    compressed,
+                    full_prompt,
+                    negative_prompt,
+                    aspect_ratio,
+                    int(duration),
                 )
 
-            video = result.get("video") or (result.get("videos") or [None])[0]
-            if not video:
-                yield sse({"status": "error", "message": f"Unexpected response shape: {list(result.keys())}"})
-                return
+                video_id = uuid.uuid4().hex
+                (VIDEOS_DIR / f"{video_id}.mp4").write_bytes(video_bytes)
 
-            video_url = video.get("url") if isinstance(video, dict) else str(video)
-            yield sse({
-                "status": "complete",
-                "message": "Video ready!",
-                "video_url": video_url,
-                "prompt_used": full_prompt,
-                "progress": 100,
-            })
+                yield sse({
+                    "status": "complete",
+                    "message": "Video ready!",
+                    "video_url": f"/video/{video_id}",
+                    "prompt_used": full_prompt,
+                    "progress": 100,
+                })
 
         except Exception as exc:
             msg = str(exc)
             if "downstream_service_error" in msg:
-                msg = "Model error: the fal.ai downstream service failed. Try again or use a different image."
+                msg = "Model error: fal.ai downstream service failed. Try again or use a different image."
             yield sse({"status": "error", "message": msg, "progress": 0})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/video/{video_id}")
+async def serve_video(video_id: str):
+    if len(video_id) != 32 or not all(c in "0123456789abcdef" for c in video_id):
+        raise HTTPException(400, "Invalid video ID")
+    path = VIDEOS_DIR / f"{video_id}.mp4"
+    if not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path, media_type="video/mp4")
