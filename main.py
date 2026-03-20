@@ -404,13 +404,34 @@ async def generate(
                 WanGenerator = modal.Cls.from_name("ref2vid-wan", "WanGenerator")
                 video_id = None
 
-                async for update in WanGenerator().generate.remote_gen_async(
-                    compressed,
-                    full_prompt,
-                    negative_prompt,
-                    aspect_ratio,
-                    int(duration),
-                ):
+                # Bridge the synchronous Modal generator into async using a
+                # thread + asyncio.Queue so we can yield SSE events as steps arrive.
+                update_queue: asyncio.Queue = asyncio.Queue()
+                loop = asyncio.get_event_loop()
+
+                def _run_gen():
+                    try:
+                        for _upd in WanGenerator().generate.remote_gen(
+                            compressed,
+                            full_prompt,
+                            negative_prompt,
+                            aspect_ratio,
+                            int(duration),
+                        ):
+                            loop.call_soon_threadsafe(update_queue.put_nowait, _upd)
+                    except Exception as _exc:
+                        loop.call_soon_threadsafe(update_queue.put_nowait, {"type": "error", "msg": str(_exc)})
+                    finally:
+                        loop.call_soon_threadsafe(update_queue.put_nowait, None)  # sentinel
+
+                loop.run_in_executor(None, _run_gen)
+
+                while True:
+                    update = await update_queue.get()
+                    if update is None:
+                        break
+                    if update.get("type") == "error":
+                        raise RuntimeError(update["msg"])
                     if update.get("type") == "progress":
                         step  = update["step"]
                         total = update["total"]
