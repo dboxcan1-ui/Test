@@ -19,7 +19,7 @@ app = modal.App("ref2vid-wan")
 MODEL_DIR = Path("/models")
 DATA_DIR  = Path("/data")
 
-MODEL_ID     = "Wan-AI/Wan2.1-I2V-14B-480P"
+MODEL_ID     = "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers"
 MODEL_SUBDIR = "wan-i2v"
 
 # ── Volumes ───────────────────────────────────────────────────────────────────
