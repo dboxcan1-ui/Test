@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ref2vid — Reference Image to Video</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f13;
+      --surface: #18181f;
+      --surface2: #21212b;
+      --border: #2e2e3a;
+      --accent: #7c6af7;
+      --accent-dim: #4e44a0;
+      --text: #e8e8f0;
+      --text-dim: #8888a0;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25rem;
+    }
+    h1 span { color: var(--accent); }
+    .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem; }
+
+    .layout {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 680px) { .layout { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .panel h2 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 1rem;
+    }
+
+    /* Drop zone */
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      color: var(--text-dim);
+      font-size: 0.875rem;
+    }
+    #drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(124, 106, 247, 0.06);
+      color: var(--text);
+    }
+    #drop-zone svg { display: block; margin: 0 auto 0.6rem; opacity: 0.5; }
+    #file-input { display: none; }
+
+    .img-count {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    /* Image grid */
+    #image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .img-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    .img-card img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+    }
+    .img-card .badge {
+      position: absolute;
+      top: 4px; left: 4px;
+      background: rgba(0,0,0,0.7);
+      color: var(--accent);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    .img-card .remove-btn {
+      position: absolute;
+      top: 4px; right: 4px;
+      background: rgba(0,0,0,0.7);
+      border: none;
+      color: var(--text-dim);
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    .img-card .remove-btn:hover { color: var(--red); }
+
+    .weight-row {
+      padding: 0.4rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .weight-row label {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+    }
+    .weight-row input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+      height: 3px;
+    }
+
+    /* Form fields */
+    .field { margin-bottom: 1rem; }
+    .field label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-bottom: 0.4rem;
+    }
+
+    textarea, select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 0.6rem 0.75rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus, select:focus { border-color: var(--accent); }
+
+    .hint {
+      margin-top: 0.4rem;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+    .hint code {
+      background: var(--surface2);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: var(--accent);
+    }
+
+    .row { display: flex; gap: 0.75rem; }
+    .row .field { flex: 1; }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .slider-val {
+      min-width: 2.5rem;
+      text-align: right;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    button#generate-btn {
+      width: 100%;
+      padding: 0.75rem;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      margin-top: 0.5rem;
+    }
+    button#generate-btn:hover:not(:disabled) { background: #9183fa; }
+    button#generate-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Right panel */
+    .right-panel { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* Progress */
+    #progress-panel { display: none; }
+    #progress-panel.visible { display: block; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 0.75rem;
+    }
+    .status-badge.uploading  { background: rgba(251,191,36,0.15); color: var(--yellow); }
+    .status-badge.queued     { background: rgba(124,106,247,0.15); color: var(--accent); }
+    .status-badge.processing { background: rgba(124,106,247,0.15); color: var(--accent); }
+    .status-badge.complete   { background: rgba(74,222,128,0.15);  color: var(--green); }
+    .status-badge.error      { background: rgba(248,113,113,0.15); color: var(--red); }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .dot.pulse { animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    #log-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      height: 130px;
+      overflow-y: auto;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+    #log-box .log-line { margin-bottom: 2px; }
+    #log-box .log-line.info  { color: var(--text-dim); }
+    #log-box .log-line.ok    { color: var(--green); }
+    #log-box .log-line.warn  { color: var(--yellow); }
+    #log-box .log-line.err   { color: var(--red); }
+
+    /* Progress bar */
+    .progress-wrap {
+      background: var(--surface2);
+      border-radius: 4px;
+      height: 4px;
+      margin: 0.75rem 0;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+    .progress-bar.indeterminate {
+      width: 40%;
+      animation: slide 1.4s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+
+    /* Video */
+    #video-panel { display: none; }
+    #video-panel.visible { display: block; }
+
+    #video-player {
+      width: 100%;
+      border-radius: 8px;
+      background: #000;
+      display: block;
+    }
+
+    .video-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .video-actions a, .video-actions button {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-primary {
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #9183fa; }
+
+    .prompt-used {
+      margin-top: 0.75rem;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .prompt-used strong { color: var(--text-dim); display: block; margin-bottom: 2px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div style="max-width:900px;margin:0 auto 1.5rem">
+    <h1><span>ref2vid</span></h1>
+    <p class="subtitle">Multi-reference image to video &mdash; powered by Wan 2.6 R2V via fal.ai</p>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: inputs -->
+    <div>
+      <div class="panel">
+        <h2>Reference Images (2 – 6)</h2>
+
+        <div id="drop-zone" role="button" tabindex="0" aria-label="Drop images here">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Drop images here or <strong>click to browse</strong>
+        </div>
+        <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/bmp" multiple />
+        <p class="img-count" id="img-count">0 / 6 images added</p>
+        <div id="image-grid"></div>
+      </div>
+
+      <div class="panel" style="margin-top:1.5rem">
+        <h2>Generation Settings</h2>
+
+        <div class="field">
+          <label>Prompt</label>
+          <textarea id="prompt" rows="4" placeholder="e.g. Character1 and Character2 walk through a neon-lit Tokyo street at night, cinematic motion"></textarea>
+          <p class="hint">
+            Use <code>Character1</code>, <code>Character2</code>, … to reference your images.<br>
+            If omitted, they are injected automatically. Images are sorted by weight (highest = Character1).
+          </p>
+        </div>
+
+        <div class="field">
+          <label>Negative Prompt (optional)</label>
+          <textarea id="neg-prompt" rows="2">low resolution, blurry, worst quality, artifacts, distorted</textarea>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Aspect Ratio</label>
+            <select id="aspect-ratio">
+              <option value="16:9">16:9 (landscape)</option>
+              <option value="9:16" selected>9:16 (portrait)</option>
+              <option value="1:1">1:1 (square)</option>
+              <option value="4:3">4:3</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Resolution</label>
+            <select id="resolution">
+              <option value="480p">480p</option>
+              <option value="720p" selected>720p</option>
+              <option value="1080p">1080p</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Duration</label>
+            <select id="duration">
+              <option value="5" selected>5 s</option>
+              <option value="10">10 s</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Motion Strength</label>
+          <div class="slider-row">
+            <input type="range" id="motion-strength" min="0" max="1" step="0.05" value="0.5" />
+            <span class="slider-val" id="motion-val">0.50</span>
+          </div>
+          <p class="hint">Low = subtle motion &nbsp;|&nbsp; High = energetic movement (influences prompt keywords)</p>
+        </div>
+
+        <button id="generate-btn" disabled>Generate Video</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: status + result -->
+    <div class="right-panel">
+      <div class="panel" id="progress-panel">
+        <h2>Generation Progress</h2>
+        <div id="status-badge" class="status-badge uploading">
+          <span class="dot pulse"></span>
+          <span id="status-text">Starting…</span>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar indeterminate" id="progress-bar"></div></div>
+        <div id="log-box"></div>
+      </div>
+
+      <div class="panel" id="video-panel">
+        <h2>Output Video</h2>
+        <video id="video-player" controls playsinline></video>
+        <div class="video-actions">
+          <a id="download-link" class="btn-primary" download="ref2vid.mp4">Download MP4</a>
+          <button class="btn-outline" id="reset-btn">New Generation</button>
+        </div>
+        <div class="prompt-used" id="prompt-used" style="display:none">
+          <strong>Prompt sent to model:</strong>
+          <span id="prompt-used-text"></span>
+        </div>
+      </div>
+
+      <!-- Idle placeholder -->
+      <div class="panel" id="idle-panel">
+        <h2>How it works</h2>
+        <ol style="padding-left:1.2rem;font-size:0.82rem;color:var(--text-dim);line-height:2">
+          <li>Drop 2–6 reference images</li>
+          <li>Adjust per-image weights (higher weight = Character1)</li>
+          <li>Write a prompt using <code style="color:var(--accent);background:var(--surface2);padding:1px 4px;border-radius:3px">Character1</code>, <code style="color:var(--accent);background:var(--surface2);padding:1px 4px;border-radius:3px">Character2</code>…</li>
+          <li>Choose aspect ratio, resolution, duration</li>
+          <li>Hit <strong>Generate Video</strong></li>
+        </ol>
+        <p style="margin-top:1rem;font-size:0.75rem;color:var(--text-dim)">
+          Uses <strong>Wan 2.6 R2V Flash</strong> via fal.ai — no local GPU required.<br>
+          Safety checker is disabled.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dropZone     = document.getElementById('drop-zone');
+    const fileInput    = document.getElementById('file-input');
+    const imgGrid      = document.getElementById('image-grid');
+    const imgCount     = document.getElementById('img-count');
+    const generateBtn  = document.getElementById('generate-btn');
+    const progressPanel= document.getElementById('progress-panel');
+    const videoPanel   = document.getElementById('video-panel');
+    const idlePanel    = document.getElementById('idle-panel');
+    const logBox       = document.getElementById('log-box');
+    const statusBadge  = document.getElementById('status-badge');
+    const statusText   = document.getElementById('status-text');
+    const progressBar  = document.getElementById('progress-bar');
+    const videoPlayer  = document.getElementById('video-player');
+    const downloadLink = document.getElementById('download-link');
+    const resetBtn     = document.getElementById('reset-btn');
+    const motionSlider = document.getElementById('motion-strength');
+    const motionVal    = document.getElementById('motion-val');
+
+    let imageFiles = [];   // {file, weight, previewUrl}
+
+    // ── Drag & drop ──────────────────────────────────────────────
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      addFiles([...e.dataTransfer.files]);
+    });
+    fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+    function addFiles(files) {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp'];
+      for (const f of files) {
+        if (!allowed.includes(f.type)) continue;
+        if (imageFiles.length >= 6) break;
+        const url = URL.createObjectURL(f);
+        imageFiles.push({ file: f, weight: 1.0, previewUrl: url });
+      }
+      renderGrid();
+    }
+
+    function removeImage(idx) {
+      URL.revokeObjectURL(imageFiles[idx].previewUrl);
+      imageFiles.splice(idx, 1);
+      renderGrid();
+    }
+
+    function renderGrid() {
+      imgGrid.innerHTML = '';
+      imageFiles.forEach((item, i) => {
+        const card = document.createElement('div');
+        card.className = 'img-card';
+        card.innerHTML = `
+          <img src="${item.previewUrl}" alt="ref ${i+1}" />
+          <span class="badge">C${i+1}</span>
+          <button class="remove-btn" data-idx="${i}" title="Remove">✕</button>
+          <div class="weight-row">
+            <label>Weight <span class="wv">${item.weight.toFixed(2)}</span></label>
+            <input type="range" min="0.1" max="2" step="0.05" value="${item.weight}" data-idx="${i}" />
+          </div>`;
+        imgGrid.appendChild(card);
+      });
+
+      // Weight sliders
+      imgGrid.querySelectorAll('input[type=range]').forEach(sl => {
+        sl.addEventListener('input', function() {
+          const idx = parseInt(this.dataset.idx);
+          imageFiles[idx].weight = parseFloat(this.value);
+          this.closest('.img-card').querySelector('.wv').textContent = imageFiles[idx].weight.toFixed(2);
+        });
+      });
+
+      // Remove buttons
+      imgGrid.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', function() { removeImage(parseInt(this.dataset.idx)); });
+      });
+
+      imgCount.textContent = `${imageFiles.length} / 6 images added`;
+      generateBtn.disabled = imageFiles.length < 2;
+    }
+
+    // ── Motion strength slider ────────────────────────────────────
+    motionSlider.addEventListener('input', function() {
+      motionVal.textContent = parseFloat(this.value).toFixed(2);
+    });
+
+    // ── Generate ─────────────────────────────────────────────────
+    generateBtn.addEventListener('click', startGeneration);
+
+    async function startGeneration() {
+      if (imageFiles.length < 2) return;
+
+      generateBtn.disabled = true;
+      idlePanel.style.display = 'none';
+      videoPanel.classList.remove('visible');
+      progressPanel.classList.add('visible');
+      logBox.innerHTML = '';
+      setStatus('uploading', 'Preparing…');
+
+      const formData = new FormData();
+      imageFiles.forEach(({ file }) => formData.append('images', file));
+      formData.append('prompt',          document.getElementById('prompt').value.trim() || 'A cinematic video featuring the referenced characters.');
+      formData.append('negative_prompt', document.getElementById('neg-prompt').value.trim());
+      formData.append('aspect_ratio',    document.getElementById('aspect-ratio').value);
+      formData.append('resolution',      document.getElementById('resolution').value);
+      formData.append('duration',        document.getElementById('duration').value);
+      formData.append('motion_strength', motionSlider.value);
+      formData.append('image_weights',   JSON.stringify(imageFiles.map(f => f.weight)));
+
+      try {
+        const resp = await fetch('/generate', { method: 'POST', body: formData });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let evt;
+            try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+            handleEvent(evt);
+          }
+        }
+      } catch (err) {
+        handleEvent({ status: 'error', message: err.message });
+      }
+    }
+
+    function handleEvent(evt) {
+      const { status, message, video_url, position, prompt_used } = evt;
+
+      switch (status) {
+        case 'uploading':
+          setStatus('uploading', message);
+          addLog(message, 'info');
+          break;
+        case 'submitted':
+          setStatus('queued', message);
+          addLog(message, 'info');
+          break;
+        case 'queued':
+          setStatus('queued', position != null ? `Queue position: ${position}` : message);
+          addLog(message, 'info');
+          break;
+        case 'processing':
+          setStatus('processing', 'Generating video…');
+          if (message) addLog(message, 'info');
+          break;
+        case 'complete':
+          setStatus('complete', 'Done!');
+          addLog('Video ready!', 'ok');
+          showVideo(video_url, evt.prompt_used);
+          generateBtn.disabled = false;
+          break;
+        case 'error':
+          setStatus('error', 'Error');
+          addLog('Error: ' + message, 'err');
+          generateBtn.disabled = false;
+          break;
+      }
+    }
+
+    function setStatus(state, label) {
+      statusBadge.className = `status-badge ${state}`;
+      statusText.textContent = label;
+      const dot = statusBadge.querySelector('.dot');
+
+      if (state === 'complete' || state === 'error') {
+        dot.classList.remove('pulse');
+        progressBar.classList.remove('indeterminate');
+        progressBar.style.width = state === 'complete' ? '100%' : '0%';
+      } else {
+        dot.classList.add('pulse');
+        progressBar.classList.add('indeterminate');
+      }
+    }
+
+    function addLog(msg, type = 'info') {
+      if (!msg) return;
+      const line = document.createElement('div');
+      line.className = `log-line ${type}`;
+      const ts = new Date().toLocaleTimeString('en', { hour12: false });
+      line.textContent = `[${ts}] ${msg}`;
+      logBox.appendChild(line);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function showVideo(url, promptUsed) {
+      videoPlayer.src = url;
+      videoPlayer.load();
+      videoPlayer.play().catch(() => {});
+      downloadLink.href = url;
+      videoPanel.classList.add('visible');
+
+      if (promptUsed) {
+        document.getElementById('prompt-used').style.display = 'block';
+        document.getElementById('prompt-used-text').textContent = promptUsed;
+      }
+    }
+
+    resetBtn.addEventListener('click', () => {
+      videoPanel.classList.remove('visible');
+      progressPanel.classList.remove('visible');
+      idlePanel.style.display = '';
+      videoPlayer.src = '';
+      document.getElementById('prompt-used').style.display = 'none';
+      generateBtn.disabled = imageFiles.length < 2;
+    });
+  </script>
+</body>
+</html>
