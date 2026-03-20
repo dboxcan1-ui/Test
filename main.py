@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "fal-ai/kling-video/o1/standard/reference-to-video"
+FAL_ENDPOINT = "fal-ai/vidu/q1/reference-to-video"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -183,9 +183,9 @@ async def generate(
             yield sse({"status": "error", "message": "FAL_KEY not set. Add it to your .env file."})
         return StreamingResponse(err(), media_type="text/event-stream")
 
-    if len(images) < 2 or len(images) > 6:
+    if len(images) < 1 or len(images) > 6:
         async def err():
-            yield sse({"status": "error", "message": f"Expected 2–6 images, got {len(images)}."})
+            yield sse({"status": "error", "message": f"Expected 1–6 images, got {len(images)}."})
         return StreamingResponse(err(), media_type="text/event-stream")
 
     try:
@@ -198,40 +198,33 @@ async def generate(
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
-    if motion_strength < 0.4:
-        cfg_scale = 0.3
+    if motion_strength < 0.3:
+        movement_amplitude = "small"
     elif motion_strength < 0.7:
-        cfg_scale = 0.5
+        movement_amplitude = "auto"
     else:
-        cfg_scale = 0.7
+        movement_amplitude = "large"
 
     full_prompt = prompt
-    if "@Element1" not in prompt:
-        full_prompt = f"@Element1 {prompt}"
 
     async def event_stream():
         try:
-            yield sse({"status": "uploading", "message": f"Uploading {len(sorted_images)} image(s) to fal storage…"})
+            # Only upload the top-weighted image — Vidu uses one reference per subject.
+            yield sse({"status": "uploading", "message": "Uploading reference image to fal storage…"})
+            primary_img = sorted_images[0]
+            suffix = os.path.splitext(primary_img.filename or ".jpg")[1] or ".jpg"
+            content = await primary_img.read()
+            primary_url = await upload_image(content, suffix)
 
-            image_urls = []
-            for i, img in enumerate(sorted_images):
-                suffix = os.path.splitext(img.filename or ".jpg")[1] or ".jpg"
-                content = await img.read()
-                yield sse({"status": "uploading", "message": f"Uploading image {i+1}/{len(sorted_images)}…", "progress": 5 + (i * 10)})
-                url = await upload_image(content, suffix)
-                image_urls.append(url)
-
-            yield sse({"status": "submitted", "message": "All images uploaded. Submitting to fal.ai…", "progress": 20})
-
-            element = {"frontal_image_url": image_urls[0]}
-            if len(image_urls) > 1:
-                element["reference_image_urls"] = image_urls[1:]
+            yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
 
             arguments = {
                 "prompt": full_prompt,
-                "elements": [element],
+                "reference_image_urls": [primary_url],
                 "aspect_ratio": aspect_ratio,
-                "cfg_scale": cfg_scale,
+                "movement_amplitude": movement_amplitude,
+                "duration": int(duration),
+                "resolution": resolution,
             }
 
             result = None
