@@ -215,9 +215,8 @@ async def generate(
         # Motion strength maps to cfg_scale (0.5–1.0 range)
         cfg_scale = round(max(0.5, min(1.0, 0.5 + motion_strength * 0.5)), 2)
     else:
-        # WAN uses Character1, Character2, … to reference images
+        # WAN uses Character1 to reference the primary image; prompt expansion rewrites for quality
         full_prompt = prompt if "Character1" in prompt else f"Character1 {prompt}"
-        full_prompt += motion_tag
 
     async def event_stream():
         try:
@@ -250,8 +249,6 @@ async def generate(
                     "aspect_ratio": aspect_ratio,
                     "resolution": resolution,
                     "duration": str(duration),
-                    "enable_prompt_expansion": False,
-                    "enable_multi_shot": False,
                     "enable_audio": False,
                 }
 
