@@ -242,13 +242,7 @@ async def generate(
                 fal_endpoint = "wan/v2.6/reference-to-video/flash"
                 arguments = {
                     "prompt": full_prompt,
-                    "negative_prompt": negative_prompt,
                     "image_urls": [primary_url],
-                    "aspect_ratio": aspect_ratio,
-                    "resolution": resolution,
-                    "duration": str(duration),
-                    "multi_shots": False,
-                    "enable_audio": False,
                 }
 
             result = None
@@ -305,8 +299,6 @@ async def generate(
 
         except Exception as exc:
             msg = str(exc)
-            if "downstream_service_error" in msg:
-                msg = "Model error: the fal.ai downstream service failed. Try again or use a different image."
             yield sse({"status": "error", "message": msg, "progress": 0})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
