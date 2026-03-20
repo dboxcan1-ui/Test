@@ -43,9 +43,7 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB (Kling limit is 10 MB)
 
 
 def compress_image(content: bytes, suffix: str) -> tuple[bytes, str]:
-    """Resize/recompress image to fit under MAX_UPLOAD_BYTES."""
-    if len(content) <= MAX_UPLOAD_BYTES:
-        return content, suffix
+    """Convert to JPEG and resize/recompress to fit under MAX_UPLOAD_BYTES."""
     img = Image.open(io.BytesIO(content)).convert("RGB")
     quality = 85
     scale = 1.0
@@ -306,12 +304,6 @@ async def generate(
 
         except Exception as exc:
             msg = str(exc)
-            # Simplify the raw fal error blob for the user
-            if "downstream_service_error" in msg:
-                msg = (
-                    "Model error (downstream_service_error): the safety checker likely rejected "
-                    "the prompt or image. Try a less restrictive prompt or a different image."
-                )
             yield sse({"status": "error", "message": msg, "progress": 0})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
