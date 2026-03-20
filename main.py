@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "fal-ai/kling-video/v2.6/pro/image-to-video"
+FAL_ENDPOINT = "fal-ai/kling-video/v1.6/standard/elements"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -214,7 +214,6 @@ async def generate(
 
             arguments = {
                 "prompt": full_prompt,
-                "start_image_url": primary_url,
                 "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
                 "aspect_ratio": aspect_ratio,
                 "cfg_scale": cfg_scale,
