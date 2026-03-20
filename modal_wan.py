@@ -86,8 +86,12 @@ def download_model():
 
     Run once before first inference:
         modal run modal_wan.py::download_model
+
+    Files are committed to the volume one-by-one so that if the container is
+    killed mid-download (e.g. heartbeat timeout), the next run resumes from
+    wherever it stopped rather than restarting from scratch.
     """
-    from huggingface_hub import snapshot_download
+    from huggingface_hub import hf_hub_download, list_repo_files
 
     model_path = MODEL_DIR / MODEL_SUBDIR
     model_volume.reload()
@@ -96,23 +100,33 @@ def download_model():
         print(f"Model already present at {model_path}, skipping download.")
         return
 
-    # Resume any partial download rather than wiping and restarting.
-    # snapshot_download skips files that already exist in local_dir.
-    print(f"Downloading {MODEL_ID} → {model_path} (resuming if partial)")
-    snapshot_download(
-        repo_id=MODEL_ID,
-        local_dir=str(model_path),
-        local_dir_use_symlinks=False,  # write real files into the volume
-    )
+    all_files = sorted(list_repo_files(MODEL_ID))
+    print(f"Repo has {len(all_files)} files to download into {model_path}")
+
+    for i, filename in enumerate(all_files, 1):
+        dest = model_path / filename
+        if dest.exists() and dest.stat().st_size > 0:
+            print(f"[{i}/{len(all_files)}] Already have {filename}, skipping")
+            continue
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[{i}/{len(all_files)}] Downloading {filename} …")
+        hf_hub_download(
+            repo_id=MODEL_ID,
+            filename=filename,
+            local_dir=str(model_path),
+            local_dir_use_symlinks=False,
+        )
+        # Commit after every file so progress survives container eviction.
+        model_volume.commit()
 
     if not (model_path / "model_index.json").exists():
         raise RuntimeError(
-            f"snapshot_download completed but model_index.json is missing in {model_path}. "
+            f"Download finished but model_index.json is missing in {model_path}. "
             "The repo layout may have changed; check the HuggingFace repo."
         )
 
-    model_volume.commit()
-    print("Download complete and committed to volume.")
+    print("Download complete.")
 
 
 # ── WanGenerator ─────────────────────────────────────────────────────────────
