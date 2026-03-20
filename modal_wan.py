@@ -52,7 +52,7 @@ ASPECT_DIMS = {
     image=image,
     volumes={str(MODEL_DIR): volume},
     timeout=600,
-    container_idle_timeout=120,
+    scaledown_window=120,
 )
 class WanGenerator:
     @modal.enter()
