@@ -251,7 +251,7 @@ async def generate(
                     "resolution": resolution,
                     "duration": str(duration),
                     "enable_prompt_expansion": False,
-                    "multi_shots": False,
+                    "enable_multi_shot": False,
                     "enable_audio": False,
                 }
 
