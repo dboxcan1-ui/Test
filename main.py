@@ -36,11 +36,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REFS_DIR = Path("refs_store")
-REFS_DIR.mkdir(exist_ok=True)
+# ── Storage paths ──────────────────────────────────────────────────────────────
+# DATA_DIR is injected as "/data" when running inside the Modal web endpoint.
+# Locally it falls back to the legacy directories so nothing breaks.
+_DATA_DIR_ENV = os.getenv("DATA_DIR")
+if _DATA_DIR_ENV:
+    DATA_DIR    = Path(_DATA_DIR_ENV)
+    REFS_DIR    = DATA_DIR / "refs"
+    VIDEOS_DIR  = DATA_DIR / "videos"
+    PROMPTS_FILE = DATA_DIR / "prompts.json"
+    LOGS_DIR    = DATA_DIR / "logs"
+else:
+    DATA_DIR    = None
+    REFS_DIR    = Path("refs_store")
+    VIDEOS_DIR  = Path("/tmp/videos")
+    PROMPTS_FILE = Path("prompts.json")
+    LOGS_DIR    = None  # skip logs when running locally without a volume
 
-VIDEOS_DIR = Path("/tmp/videos")
-VIDEOS_DIR.mkdir(exist_ok=True)
+REFS_DIR.mkdir(parents=True, exist_ok=True)
+VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+if LOGS_DIR:
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Modal volume helpers ───────────────────────────────────────────────────────
+# _volume is set by modal_wan.py's web() entry-point when running inside Modal.
+_volume = None
+
+
+def _reload_volume() -> None:
+    if _volume is not None:
+        _volume.reload()
+
+
+def _commit_volume() -> None:
+    if _volume is not None:
+        _volume.commit()
+
+
+# ── True when running inside a Modal container (no explicit token needed) ─────
+_inside_modal = bool(os.getenv("MODAL_TASK_ID"))
 
 
 def sse(data: dict) -> str:
@@ -81,18 +115,64 @@ async def upload_image(content: bytes, suffix: str) -> str:
         os.unlink(tmp_path)
 
 
+# ── Prompt history ─────────────────────────────────────────────────────────────
+
+def _save_prompt(text: str) -> None:
+    """Prepend to recent-prompts list (max 3, deduplicated)."""
+    if not text.strip():
+        return
+    try:
+        prompts = json.loads(PROMPTS_FILE.read_text()) if PROMPTS_FILE.exists() else []
+        prompts = [p for p in prompts if p.get("text") != text]
+        prompts.insert(0, {
+            "text": text,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        PROMPTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PROMPTS_FILE.write_text(json.dumps(prompts[:3], indent=2))
+        _commit_volume()
+    except Exception:
+        pass
+
+
+# ── Generation log ─────────────────────────────────────────────────────────────
+
+def _write_log(entry: dict) -> None:
+    if LOGS_DIR is None:
+        return
+    try:
+        ts  = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        vid = entry.get("video_id", "err")
+        (LOGS_DIR / f"{ts}_{vid}.json").write_text(json.dumps(entry, indent=2))
+        _commit_volume()
+    except Exception:
+        pass
+
+
 # ── Static pages ──────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    with open("index.html") as f:
-        return f.read()
+    return (Path(__file__).parent / "index.html").read_text()
+
+
+# ── Prompts endpoint ───────────────────────────────────────────────────────────
+
+@app.get("/prompts")
+async def get_prompts():
+    if not PROMPTS_FILE.exists():
+        return []
+    try:
+        return json.loads(PROMPTS_FILE.read_text())
+    except Exception:
+        return []
 
 
 # ── Reference library ─────────────────────────────────────────────────────────
 
 @app.get("/references")
 async def list_references():
+    await asyncio.to_thread(_reload_volume)
     refs = []
     for d in sorted(REFS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
         meta_file = d / "meta.json"
@@ -139,6 +219,7 @@ async def save_reference(
         "prompt": prompt,
     }
     (ref_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+    await asyncio.to_thread(_commit_volume)
     return meta
 
 
@@ -156,12 +237,12 @@ async def delete_reference(ref_id: str):
     if not ref_dir.exists():
         raise HTTPException(404, "Reference set not found")
     shutil.rmtree(ref_dir)
+    await asyncio.to_thread(_commit_volume)
     return {"ok": True}
 
 
 @app.get("/references/{ref_id}/images/{filename}")
 async def get_reference_image(ref_id: str, filename: str):
-    # Prevent path traversal
     if "/" in filename or "\\" in filename or filename.startswith("."):
         raise HTTPException(400, "Invalid filename")
     path = REFS_DIR / ref_id / filename
@@ -191,7 +272,7 @@ async def generate(
             yield sse({"status": "error", "message": "FAL_KEY not set. Required for Kling model."})
         return StreamingResponse(err(), media_type="text/event-stream")
 
-    if not use_kling and not os.getenv("MODAL_TOKEN_ID"):
+    if not use_kling and not os.getenv("MODAL_TOKEN_ID") and not _inside_modal:
         async def err():
             yield sse({"status": "error", "message": "MODAL_TOKEN_ID not set. Required for WAN model."})
         return StreamingResponse(err(), media_type="text/event-stream")
@@ -221,13 +302,12 @@ async def generate(
         motion_tag = " Highly dynamic, energetic motion."
 
     if use_kling:
-        # Kling uses @Element1, @Element2, … to reference images
         full_prompt = prompt if "@Element1" in prompt else f"@Element1 {prompt}"
-        # Motion strength maps to cfg_scale (0.5–1.0 range)
         cfg_scale = round(max(0.5, min(1.0, 0.5 + motion_strength * 0.5)), 2)
     else:
-        # WAN uses Character1 to reference the primary image; prompt expansion rewrites for quality
         full_prompt = prompt if "Character1" in prompt else f"Character1 {prompt}"
+
+    gen_start = datetime.now(timezone.utc)
 
     async def event_stream():
         try:
@@ -284,6 +364,7 @@ async def generate(
                             await asyncio.sleep(wait)
                         else:
                             raise
+
                 if result is None:
                     raise RuntimeError(
                         "The model failed after 3 attempts (downstream_service_error). "
@@ -296,6 +377,15 @@ async def generate(
                     return
 
                 video_url = video.get("url") if isinstance(video, dict) else str(video)
+
+                _save_prompt(prompt)
+                elapsed = (datetime.now(timezone.utc) - gen_start).total_seconds()
+                _write_log({
+                    "model": "kling", "prompt": full_prompt, "aspect_ratio": aspect_ratio,
+                    "duration": duration, "status": "complete", "video_url": video_url,
+                    "created_at": gen_start.isoformat(), "elapsed_seconds": round(elapsed, 1),
+                })
+
                 yield sse({
                     "status": "complete",
                     "message": "Video ready!",
@@ -309,21 +399,44 @@ async def generate(
                 yield sse({"status": "uploading", "message": "Preparing image…"})
                 compressed, _ = await asyncio.to_thread(compress_image, content, suffix)
 
-                yield sse({"status": "submitted", "message": "Submitting to Modal…", "progress": 20})
-                yield sse({"status": "processing", "message": "Generating video on GPU…", "progress": 35})
+                yield sse({"status": "submitted", "message": "Submitting to Modal — container may need a moment to start…", "progress": 15})
 
                 WanGenerator = modal.Cls.from_name("ref2vid-wan", "WanGenerator")
-                video_bytes = await asyncio.to_thread(
-                    WanGenerator().generate.remote,
+                video_id = None
+
+                async for update in WanGenerator().generate.remote_gen_async(
                     compressed,
                     full_prompt,
                     negative_prompt,
                     aspect_ratio,
                     int(duration),
-                )
+                ):
+                    if update.get("type") == "progress":
+                        step  = update["step"]
+                        total = update["total"]
+                        # Scale 20 → 95 % across the inference steps
+                        pct = 20 + int((step / total) * 75)
+                        yield sse({
+                            "status":  "processing",
+                            "message": f"Step {step}/{total}",
+                            "progress": pct,
+                        })
+                    elif update.get("type") == "done":
+                        video_id = update["video_id"]
 
-                video_id = uuid.uuid4().hex
-                (VIDEOS_DIR / f"{video_id}.mp4").write_bytes(video_bytes)
+                if video_id is None:
+                    raise RuntimeError("No video returned from GPU container.")
+
+                # Sync the data volume so we can serve the file immediately
+                await asyncio.to_thread(_reload_volume)
+
+                _save_prompt(prompt)
+                elapsed = (datetime.now(timezone.utc) - gen_start).total_seconds()
+                _write_log({
+                    "model": "wan", "prompt": full_prompt, "aspect_ratio": aspect_ratio,
+                    "duration": duration, "status": "complete", "video_id": video_id,
+                    "created_at": gen_start.isoformat(), "elapsed_seconds": round(elapsed, 1),
+                })
 
                 yield sse({
                     "status": "complete",
@@ -337,6 +450,10 @@ async def generate(
             msg = str(exc)
             if "downstream_service_error" in msg:
                 msg = "Model error: fal.ai downstream service failed. Try again or use a different image."
+            _write_log({
+                "model": model, "prompt": full_prompt, "status": "error", "error": msg,
+                "created_at": gen_start.isoformat(),
+            })
             yield sse({"status": "error", "message": msg, "progress": 0})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

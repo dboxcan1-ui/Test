@@ -236,6 +236,19 @@
 
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Recent prompts ── */
+    #recent-prompts-wrap { margin-top: 0.5rem; }
+    #recent-prompts-wrap p { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.3rem; }
+    .prompt-chip {
+      display: inline-block;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 8px; font-size: 0.68rem;
+      cursor: pointer; margin: 2px; color: var(--text-dim);
+      max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      vertical-align: middle;
+    }
+    .prompt-chip:hover { border-color: var(--accent); color: var(--accent); }
   </style>
 </head>
 <body>
@@ -294,6 +307,10 @@
       <p class="hint" id="prompt-hint">
         Use <code>Character1</code> to reference your image. Auto-injected if omitted.
       </p>
+      <div id="recent-prompts-wrap" style="display:none">
+        <p>Recent:</p>
+        <div id="recent-prompts"></div>
+      </div>
     </div>
 
     <div class="field">
@@ -708,6 +725,11 @@
       case 'processing':
         if (!processingStartTime) {
           processingStartTime = Date.now();
+        }
+        // If we have a real deterministic progress value, drop the animation
+        if (typeof progress === 'number' && progress >= 0) {
+          progressBar.classList.remove('indeterminate');
+        } else if (!processingStartTime) {
           progressBar.classList.add('indeterminate');
         }
         setStatus('processing', 'Generating video…');
@@ -722,6 +744,7 @@
         addLog('Video ready!', 'ok');
         showVideo(video_url, prompt_used);
         generateBtn.disabled = false;
+        loadRecentPrompts();
         break;
       case 'error':
         stopTimer();
@@ -774,8 +797,29 @@
     generateBtn.disabled = imageFiles.length < 1;
   });
 
+  // ── Recent prompts ────────────────────────────────────────────────────────
+  async function loadRecentPrompts() {
+    try {
+      const prompts = await fetch('/prompts').then(r => r.json()).catch(() => []);
+      const wrap = document.getElementById('recent-prompts-wrap');
+      const container = document.getElementById('recent-prompts');
+      if (!prompts.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+      container.innerHTML = prompts.map((p, i) => {
+        const preview = p.text.length > 55 ? p.text.substring(0, 55) + '…' : p.text;
+        return `<span class="prompt-chip" data-idx="${i}" title="${escHtml(p.text)}">${escHtml(preview)}</span>`;
+      }).join('');
+      container.querySelectorAll('.prompt-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.getElementById('prompt').value = prompts[parseInt(chip.dataset.idx)].text;
+        });
+      });
+    } catch {}
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   loadLibrary();
+  loadRecentPrompts();
 </script>
 </body>
 </html>
