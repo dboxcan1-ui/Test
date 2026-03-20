@@ -216,11 +216,9 @@ async def generate(
 
             yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
 
-            # One element = one character. Passing multiple images caused
-            # Kling to render each as a separate person in the scene.
             arguments = {
                 "prompt": full_prompt,
-                "elements": [{"frontal_image_url": primary_url}],
+                "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
                 "aspect_ratio": aspect_ratio,
                 "cfg_scale": cfg_scale,
                 "enable_safety_checker": False,
