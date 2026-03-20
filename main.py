@@ -31,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "wan/v2.6/reference-to-video/flash"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -177,6 +176,7 @@ async def generate(
     resolution: str = Form(default="720p"),
     duration: str = Form(default="5"),
     motion_strength: float = Form(default=0.5),
+    model: str = Form(default="wan"),
 ):
     if not os.getenv("FAL_KEY"):
         async def err():
@@ -198,6 +198,8 @@ async def generate(
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
+    use_kling = model == "kling"
+
     if motion_strength < 0.3:
         motion_tag = " Subtle, gentle motion."
     elif motion_strength < 0.6:
@@ -207,13 +209,18 @@ async def generate(
     else:
         motion_tag = " Highly dynamic, energetic motion."
 
-    # WAN references characters as Character1, Character2, etc.
-    full_prompt = prompt if "Character1" in prompt else f"Character1 {prompt}"
-    full_prompt += motion_tag
+    if use_kling:
+        # Kling uses @Element1, @Element2, … to reference images
+        full_prompt = prompt if "@Element1" in prompt else f"@Element1 {prompt}"
+        # Motion strength maps to cfg_scale (0.5–1.0 range)
+        cfg_scale = round(max(0.5, min(1.0, 0.5 + motion_strength * 0.5)), 2)
+    else:
+        # WAN uses Character1, Character2, … to reference images
+        full_prompt = prompt if "Character1" in prompt else f"Character1 {prompt}"
+        full_prompt += motion_tag
 
     async def event_stream():
         try:
-            # Only upload the top-weighted image — Vidu uses one reference per subject.
             yield sse({"status": "uploading", "message": "Uploading reference image to fal storage…"})
             primary_img = sorted_images[0]
             suffix = os.path.splitext(primary_img.filename or ".jpg")[1] or ".jpg"
@@ -222,22 +229,35 @@ async def generate(
 
             yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
 
-            arguments = {
-                "prompt": full_prompt,
-                "image_urls": [primary_url],
-                "aspect_ratio": aspect_ratio,
-                "resolution": resolution,
-                "duration": int(duration),
-                "enable_safety_checker": False,
-                "enable_prompt_expansion": False,
-                "multi_shots": False,
-                "enable_audio": False,
-            }
+            if use_kling:
+                fal_endpoint = "fal-ai/kling-video/v1.6/standard/elements"
+                arguments = {
+                    "prompt": full_prompt,
+                    "input_image_urls": [primary_url],
+                    "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
+                    "aspect_ratio": aspect_ratio,
+                    "duration": str(duration),
+                    "cfg_scale": cfg_scale,
+                    "enable_safety_checker": False,
+                }
+            else:
+                fal_endpoint = "wan/v2.6/reference-to-video/flash"
+                arguments = {
+                    "prompt": full_prompt,
+                    "image_urls": [primary_url],
+                    "aspect_ratio": aspect_ratio,
+                    "resolution": resolution,
+                    "duration": int(duration),
+                    "enable_safety_checker": False,
+                    "enable_prompt_expansion": False,
+                    "multi_shots": False,
+                    "enable_audio": False,
+                }
 
             result = None
             for attempt in range(3):
                 try:
-                    handle = await fal_client.submit_async(FAL_ENDPOINT, arguments=arguments)
+                    handle = await fal_client.submit_async(fal_endpoint, arguments=arguments)
                     yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id, "progress": 25})
 
                     logs_seen = 0

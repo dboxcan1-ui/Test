@@ -241,7 +241,7 @@
 <body>
 <div style="max-width:1100px;margin:0 auto 1.5rem">
   <h1><span>ref2vid</span></h1>
-  <p class="subtitle">Multi-reference image to video &mdash; Wan 2.6 R2V Flash via fal.ai</p>
+  <p class="subtitle">Multi-reference image to video via fal.ai</p>
 </div>
 
 <div class="layout">
@@ -280,9 +280,17 @@
     <h2>Generation Settings</h2>
 
     <div class="field">
+      <label>Model</label>
+      <select id="model-select">
+        <option value="wan" selected>WAN 2.6 R2V Flash — permissive, reference-aware</option>
+        <option value="kling">Kling 1.6 Standard Elements — high quality (content-filtered)</option>
+      </select>
+    </div>
+
+    <div class="field">
       <label>Prompt</label>
-      <textarea id="prompt" rows="4" placeholder="e.g. Character1 and Character2 walk through a neon-lit Tokyo street at night, cinematic motion"></textarea>
-      <p class="hint">
+      <textarea id="prompt" rows="4" placeholder="e.g. Character1 walks through a neon-lit Tokyo street at night, cinematic motion"></textarea>
+      <p class="hint" id="prompt-hint">
         Use <code>Character1</code>, <code>Character2</code>… to reference your images (sorted by weight).<br>
         They are auto-injected if omitted.
       </p>
@@ -375,8 +383,8 @@
         <li>Hit <strong>Generate Video</strong></li>
         <li>Save image sets to the library for quick reuse</li>
       </ol>
-      <p style="margin-top:0.9rem;font-size:0.72rem;color:var(--text-dim)">
-        Wan 2.6 R2V Flash · 9:16 · 720p · 5s by default<br>Safety checker disabled.
+      <p style="margin-top:0.9rem;font-size:0.72rem;color:var(--text-dim)" id="idle-model-note">
+        WAN 2.6 R2V Flash · 9:16 · 720p · 5s by default<br>Safety checker disabled.
       </p>
     </div>
 
@@ -408,11 +416,38 @@
   const motionVal     = document.getElementById('motion-val');
   const elapsedDisplay= document.getElementById('elapsed-display');
   const etaDisplay    = document.getElementById('eta-display');
+  const modelSelect   = document.getElementById('model-select');
+  const promptHint    = document.getElementById('prompt-hint');
+  const idleModelNote = document.getElementById('idle-model-note');
 
   let imageFiles = []; // [{file, weight, previewUrl}]
 
-  // ETA model: typical R2V Flash durations by resolution
-  const ETA_SECONDS = { '480p': 45, '720p': 75, '1080p': 120 };
+  // ETA model: typical durations by model+resolution
+  const ETA_SECONDS = {
+    wan:   { '480p': 45, '720p': 75, '1080p': 120 },
+    kling: { '480p': 40, '720p': 60, '1080p': 90 },
+  };
+
+  const PROMPT_HINTS = {
+    wan:   `Use <code>Character1</code>, <code>Character2</code>… to reference your images (sorted by weight).<br>They are auto-injected if omitted.`,
+    kling: `Use <code>@Element1</code>, <code>@Element2</code>… to reference your images (sorted by weight).<br>They are auto-injected if omitted. <span style="color:var(--yellow)">⚠ Kling enforces content policy at the model level.</span>`,
+  };
+
+  const MODEL_NOTES = {
+    wan:   `WAN 2.6 R2V Flash · 9:16 · 720p · 5s by default<br>Safety checker disabled.`,
+    kling: `Kling 1.6 Standard Elements · 9:16 · 5s by default<br>Content-filtered by model regardless of safety setting.`,
+  };
+
+  function updateModelUI() {
+    const m = modelSelect.value;
+    promptHint.innerHTML = PROMPT_HINTS[m];
+    idleModelNote.innerHTML = MODEL_NOTES[m];
+    // Resolution selector only meaningful for WAN
+    document.getElementById('resolution').closest('.field').style.display = m === 'wan' ? '' : 'none';
+  }
+
+  modelSelect.addEventListener('change', updateModelUI);
+  updateModelUI();
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   let timerInterval = null;
@@ -436,7 +471,8 @@
 
     if (processingStartTime) {
       const resolution = document.getElementById('resolution').value;
-      const target = ETA_SECONDS[resolution] || 75;
+      const m = modelSelect.value;
+      const target = (ETA_SECONDS[m] || ETA_SECONDS.wan)[resolution] || 75;
       const procElapsed = (Date.now() - processingStartTime) / 1000;
       const remaining = Math.max(0, Math.ceil(target - procElapsed));
       if (remaining > 0) {
@@ -623,6 +659,7 @@
     fd.append('duration',        document.getElementById('duration').value);
     fd.append('motion_strength', motionSlider.value);
     fd.append('image_weights',   JSON.stringify(imageFiles.map(f => f.weight)));
+    fd.append('model',           modelSelect.value);
 
     try {
       const resp = await fetch('/generate', { method: 'POST', body: fd });
