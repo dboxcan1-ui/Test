@@ -87,7 +87,6 @@ def download_model():
     Run once before first inference:
         modal run modal_wan.py::download_model
     """
-    import shutil
     from huggingface_hub import snapshot_download
 
     model_path = MODEL_DIR / MODEL_SUBDIR
@@ -97,13 +96,14 @@ def download_model():
         print(f"Model already present at {model_path}, skipping download.")
         return
 
-    # Remove any partial download so we start clean
-    if model_path.exists():
-        print(f"Removing incomplete download at {model_path}")
-        shutil.rmtree(model_path)
-
-    print(f"Downloading {MODEL_ID} → {model_path}")
-    snapshot_download(repo_id=MODEL_ID, local_dir=str(model_path))
+    # Resume any partial download rather than wiping and restarting.
+    # snapshot_download skips files that already exist in local_dir.
+    print(f"Downloading {MODEL_ID} → {model_path} (resuming if partial)")
+    snapshot_download(
+        repo_id=MODEL_ID,
+        local_dir=str(model_path),
+        local_dir_use_symlinks=False,  # write real files into the volume
+    )
 
     if not (model_path / "model_index.json").exists():
         raise RuntimeError(
@@ -134,31 +134,20 @@ def download_model():
 class WanGenerator:
     @modal.enter()
     def load(self):
-        import shutil
         import torch
         from diffusers import WanImageToVideoPipeline
-        from huggingface_hub import snapshot_download
 
         model_path = MODEL_DIR / MODEL_SUBDIR
 
-        # Reload so this container sees the latest committed volume state
-        # (another container may have downloaded and committed since we started)
+        # Reload so this container sees the latest committed volume state.
         model_volume.reload()
 
         if not (model_path / "model_index.json").exists():
-            # Remove any partial download left by a previous failed attempt
-            if model_path.exists():
-                shutil.rmtree(model_path)
-
-            snapshot_download(repo_id=MODEL_ID, local_dir=str(model_path))
-
-            if not (model_path / "model_index.json").exists():
-                raise RuntimeError(
-                    f"snapshot_download finished but {model_path}/model_index.json is missing. "
-                    "Run `modal run modal_wan.py::download_model` to pre-populate the volume."
-                )
-
-            model_volume.commit()
+            raise RuntimeError(
+                f"Model weights not found at {model_path}. "
+                "Run `modal run modal_wan.py::download_model` once to populate the volume, "
+                "then redeploy."
+            )
 
         self.pipe = WanImageToVideoPipeline.from_pretrained(
             str(model_path),
