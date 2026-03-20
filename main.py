@@ -204,10 +204,9 @@ async def generate(
             arguments = {
                 "prompt": full_prompt,
                 "image_urls": image_urls,
-                "video_urls": [],
                 "aspect_ratio": aspect_ratio,
                 "resolution": resolution,
-                "duration": duration,
+                "duration": int(duration),
                 "negative_prompt": negative_prompt,
                 "enable_safety_checker": False,
                 "enable_prompt_expansion": False,
