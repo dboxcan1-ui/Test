@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "wan/v2.6/reference-to-video"
+FAL_ENDPOINT = "wan/v2.6/reference-to-video/flash"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -204,7 +204,6 @@ async def generate(
             arguments = {
                 "prompt": full_prompt,
                 "image_urls": image_urls,
-                "video_urls": [],
                 "aspect_ratio": aspect_ratio,
                 "resolution": resolution,
                 "duration": int(duration),
