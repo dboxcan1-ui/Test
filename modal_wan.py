@@ -119,6 +119,11 @@ def download_model():
         str(DATA_DIR):  data_volume,
     },
     timeout=600,
+    # startup_timeout covers @modal.enter(); needs to be long enough for both
+    # model download (~20 min for 14B on first run) and loading into VRAM (~3 min).
+    # After running `modal run modal_wan.py::download_model` once to pre-populate
+    # the volume, cold starts only load from disk and finish well under 300 s.
+    startup_timeout=1800,
     scaledown_window=600,
 )
 class WanGenerator:
