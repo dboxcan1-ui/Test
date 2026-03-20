@@ -1,12 +1,13 @@
-"""Modal deployment for WAN I2V video generation + persistent web app.
+"""Modal deployment for Phantom-Wan reference-to-video + persistent web app.
 
 Setup:
     pip install modal
-    modal token new              # one-time auth
-    modal deploy modal_wan.py    # deploy everything
+    modal token new
+    modal run modal_wan.py::download_model   # download weights once
+    modal deploy modal_wan.py                # deploy app
 
 Volumes created automatically:
-    wan-models   – model weights cache
+    wan-models   – Phantom + Wan2.1 base weights
     ref2vid-data – videos, refs, prompts, logs (persists across deploys)
 """
 import os
@@ -19,8 +20,11 @@ app = modal.App("ref2vid-wan")
 MODEL_DIR = Path("/models")
 DATA_DIR  = Path("/data")
 
-MODEL_ID     = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
-MODEL_SUBDIR = "wan-i2v"
+# Phantom needs Wan2.1-T2V-1.3B (VAE + text encoder) + its own weights
+WAN_BASE_ID     = "Wan-AI/Wan2.1-T2V-1.3B"
+PHANTOM_ID      = "bytedance-research/Phantom"
+WAN_BASE_SUBDIR = "wan-base"
+PHANTOM_SUBDIR  = "phantom"
 
 # ── Volumes ───────────────────────────────────────────────────────────────────
 model_volume = modal.Volume.from_name("wan-models",   create_if_missing=True)
@@ -29,18 +33,21 @@ data_volume  = modal.Volume.from_name("ref2vid-data", create_if_missing=True)
 # ── GPU image ─────────────────────────────────────────────────────────────────
 gpu_image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("ffmpeg")
+    .apt_install("ffmpeg", "git")
+    .run_commands("git clone https://github.com/Phantom-video/Phantom /opt/phantom")
     .pip_install(
         "torch==2.5.1",
         "torchvision==0.20.1",
-        "diffusers>=0.31.0",
         "transformers>=4.45.0",
         "accelerate>=0.34.0",
         "huggingface_hub>=0.25.0",
-        "imageio[ffmpeg]>=2.34.0",
         "Pillow>=10.0.0",
         "safetensors",
         "sentencepiece",
+        "imageio[ffmpeg]>=2.34.0",
+        "easydict",
+        "ftfy",
+        "numpy",
     )
 )
 
@@ -60,21 +67,20 @@ web_image = (
     .add_local_file("index.html", "/app/index.html")
 )
 
-# ── Aspect ratio dims (height, width) for 480p model ─────────────────────────
-ASPECT_DIMS = {
-    "9:16": (832, 480),
-    "16:9": (480, 832),
-    "1:1":  (480, 480),
-    "4:3":  (624, 832),
-    "3:4":  (832, 624),
+# ── Aspect ratio → Phantom --size (WxH) ──────────────────────────────────────
+ASPECT_SIZES = {
+    "9:16": "480*832",
+    "16:9": "832*480",
+    "1:1":  "480*480",
+    "4:3":  "640*480",
+    "3:4":  "480*640",
 }
 
-
-# ── Model download (run once: modal run modal_wan.py::download_model) ─────────
-# Reuse the same dotenv secret so HF_TOKEN is available for authenticated HF downloads.
+# ── Secrets ───────────────────────────────────────────────────────────────────
 _dotenv_secrets = [modal.Secret.from_dotenv()] if Path(".env").exists() else []
 
 
+# ── Model download (run once: modal run modal_wan.py::download_model) ─────────
 @app.function(
     image=gpu_image,
     volumes={str(MODEL_DIR): model_volume},
@@ -82,54 +88,52 @@ _dotenv_secrets = [modal.Secret.from_dotenv()] if Path(".env").exists() else []
     timeout=3600,
 )
 def download_model():
-    """Download WAN model weights into the persistent volume.
+    """Download Phantom-Wan weights into the persistent volume.
 
     Run once before first inference:
         modal run modal_wan.py::download_model
 
-    Files are committed to the volume one-by-one so that if the container is
-    killed mid-download (e.g. heartbeat timeout), the next run resumes from
-    wherever it stopped rather than restarting from scratch.
+    Downloads two repos:
+      1. Wan-AI/Wan2.1-T2V-1.3B  – VAE + text encoder used by Phantom
+      2. bytedance-research/Phantom – Phantom-Wan-14B weights
     """
     from huggingface_hub import hf_hub_download, list_repo_files
 
-    model_path = MODEL_DIR / MODEL_SUBDIR
     model_volume.reload()
 
-    if (model_path / "model_index.json").exists():
-        print(f"Model already present at {model_path}, skipping download.")
-        return
+    repos = [
+        (WAN_BASE_ID, WAN_BASE_SUBDIR, "Wan2.1-T2V-1.3B.pth"),
+        (PHANTOM_ID,  PHANTOM_SUBDIR,  "Phantom-Wan-14B.pth"),
+    ]
 
-    all_files = sorted(list_repo_files(MODEL_ID))
-    print(f"Repo has {len(all_files)} files to download into {model_path}")
-
-    for i, filename in enumerate(all_files, 1):
-        dest = model_path / filename
-        if dest.exists() and dest.stat().st_size > 0:
-            print(f"[{i}/{len(all_files)}] Already have {filename}, skipping")
+    for repo_id, subdir, sentinel in repos:
+        model_path = MODEL_DIR / subdir
+        if (model_path / sentinel).exists():
+            print(f"{repo_id} already present at {model_path}, skipping.")
             continue
 
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        print(f"[{i}/{len(all_files)}] Downloading {filename} …")
-        hf_hub_download(
-            repo_id=MODEL_ID,
-            filename=filename,
-            local_dir=str(model_path),
-            local_dir_use_symlinks=False,
-        )
-        # Commit after every file so progress survives container eviction.
-        model_volume.commit()
+        all_files = sorted(list_repo_files(repo_id))
+        print(f"Downloading {repo_id} ({len(all_files)} files) → {model_path}")
 
-    if not (model_path / "model_index.json").exists():
-        raise RuntimeError(
-            f"Download finished but model_index.json is missing in {model_path}. "
-            "The repo layout may have changed; check the HuggingFace repo."
-        )
+        for i, filename in enumerate(all_files, 1):
+            dest = model_path / filename
+            if dest.exists() and dest.stat().st_size > 0:
+                print(f"  [{i}/{len(all_files)}] Already have {filename}, skipping")
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            print(f"  [{i}/{len(all_files)}] {filename} …")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                local_dir=str(model_path),
+                local_dir_use_symlinks=False,
+            )
+            model_volume.commit()
 
     print("Download complete.")
 
 
-# ── WanGenerator ─────────────────────────────────────────────────────────────
+# ── PhantomGenerator ──────────────────────────────────────────────────────────
 @app.cls(
     gpu="A100-80GB",
     image=gpu_image,
@@ -138,35 +142,27 @@ def download_model():
         str(DATA_DIR):  data_volume,
     },
     timeout=600,
-    # startup_timeout covers @modal.enter(); needs to be long enough for both
-    # model download (~20 min for 14B on first run) and loading into VRAM (~3 min).
-    # After running `modal run modal_wan.py::download_model` once to pre-populate
-    # the volume, cold starts only load from disk and finish well under 300 s.
-    startup_timeout=1800,
+    startup_timeout=600,
     scaledown_window=600,
 )
 class WanGenerator:
     @modal.enter()
     def load(self):
-        import torch
-        from diffusers import WanImageToVideoPipeline
-
-        model_path = MODEL_DIR / MODEL_SUBDIR
-
-        # Reload so this container sees the latest committed volume state.
+        import sys
+        sys.path.insert(0, "/opt/phantom")
         model_volume.reload()
 
-        if not (model_path / "model_index.json").exists():
+        wan_path     = MODEL_DIR / WAN_BASE_SUBDIR
+        phantom_path = MODEL_DIR / PHANTOM_SUBDIR
+
+        if not (phantom_path / "Phantom-Wan-14B.pth").exists():
             raise RuntimeError(
-                f"Model weights not found at {model_path}. "
-                "Run `modal run modal_wan.py::download_model` once to populate the volume, "
-                "then redeploy."
+                "Phantom weights not found. "
+                "Run `modal run modal_wan.py::download_model` first."
             )
 
-        self.pipe = WanImageToVideoPipeline.from_pretrained(
-            str(model_path),
-            torch_dtype=torch.bfloat16,
-        ).to("cuda")
+        self.wan_path     = str(wan_path)
+        self.phantom_path = str(phantom_path)
 
     @modal.method()
     def generate(
@@ -177,51 +173,51 @@ class WanGenerator:
         aspect_ratio: str,
         duration: int,
     ) -> str:
-        """Run inference and save the MP4 to the data volume.
+        """Run Phantom-Wan inference and save the MP4 to the data volume.
         Returns the video_id (hex string) so the web endpoint can serve it."""
-        import io
+        import subprocess
         import tempfile
         import uuid
-        from diffusers.utils import export_to_video
-        from PIL import Image
 
-        height, width = ASPECT_DIMS.get(aspect_ratio, (832, 480))
-        num_frames = duration * 16 + 1
-
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-        out = self.pipe(
-            image=image,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            guidance_scale=5.0,
-            num_inference_steps=30,
-        )
-
-        # ── Save video to shared data volume ──────────────────────────────────
-        frames    = out.frames[0]
+        size      = ASPECT_SIZES.get(aspect_ratio, "480*832")
+        frame_num = duration * 24 + 1   # Phantom trained at 24 fps
         video_id  = uuid.uuid4().hex
+
         videos_dir = DATA_DIR / "videos"
         videos_dir.mkdir(parents=True, exist_ok=True)
+        output_path = videos_dir / f"{video_id}.mp4"
 
-        tmp = tempfile.mktemp(suffix=".mp4")
-        try:
-            export_to_video(frames, tmp, fps=16)
-            (videos_dir / f"{video_id}.mp4").write_bytes(Path(tmp).read_bytes())
-        finally:
-            if Path(tmp).exists():
-                Path(tmp).unlink()
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_path = Path(tmp) / "ref.jpg"
+            ref_path.write_bytes(image_bytes)
+
+            cmd = [
+                "python", "/opt/phantom/generate.py",
+                "--task",         "s2v-14B",
+                "--size",         size,
+                "--frame_num",    str(frame_num),
+                "--sample_fps",   "24",
+                "--ckpt_dir",     self.wan_path,
+                "--phantom_ckpt", self.phantom_path,
+                "--ref_image",    str(ref_path),
+                "--prompt",       prompt,
+                "--save_file",    str(output_path),
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Phantom inference failed:\n{result.stderr[-3000:]}"
+                )
+
+        if not output_path.exists():
+            raise RuntimeError("Phantom ran successfully but output file not found.")
 
         data_volume.commit()
         return video_id
 
 
 # ── Web endpoint ──────────────────────────────────────────────────────────────
-
-
 @app.function(
     image=web_image,
     volumes={str(DATA_DIR): data_volume},
@@ -237,18 +233,15 @@ def web():
 
     sys.path.insert(0, "/app")
 
-    # Set DATA_DIR before importing main so module-level path init picks it up
     os.environ["DATA_DIR"] = str(DATA_DIR)
 
     import main as _main
 
-    # Inject volume reference so main.py can reload/commit
     _main._volume = data_volume
 
-    # Override paths in case the module was already cached
-    _main.DATA_DIR    = DATA_DIR
-    _main.REFS_DIR    = DATA_DIR / "refs"
-    _main.VIDEOS_DIR  = DATA_DIR / "videos"
+    _main.DATA_DIR     = DATA_DIR
+    _main.REFS_DIR     = DATA_DIR / "refs"
+    _main.VIDEOS_DIR   = DATA_DIR / "videos"
     _main.PROMPTS_FILE = DATA_DIR / "prompts.json"
     _main.REFS_DIR.mkdir(parents=True, exist_ok=True)
     _main.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
