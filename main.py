@@ -279,14 +279,19 @@ async def generate(
                     result = await handle.get()
                     break
                 except Exception as e:
-                    if "downstream_service_error" in str(e) and attempt < 2:
+                    err_str = str(e)
+                    if "downstream_service_error" in err_str and attempt < 2:
                         wait = 2 ** attempt
-                        yield sse({"status": "queued", "message": f"Downstream error, retrying in {wait}s… (attempt {attempt+2}/3)", "progress": 20})
+                        yield sse({"status": "queued", "message": f"Model error, retrying in {wait}s… (attempt {attempt+2}/3)", "progress": 20})
                         await asyncio.sleep(wait)
                     else:
                         raise
             if result is None:
-                raise RuntimeError("fal.ai downstream service failed after 3 attempts")
+                raise RuntimeError(
+                    "The model failed after 3 attempts (downstream_service_error). "
+                    "This is often caused by the safety checker rejecting the prompt or image. "
+                    "Try a different prompt or image."
+                )
 
             video = result.get("video") or (result.get("videos") or [None])[0]
             if not video:
@@ -303,6 +308,13 @@ async def generate(
             })
 
         except Exception as exc:
-            yield sse({"status": "error", "message": str(exc), "progress": 0})
+            msg = str(exc)
+            # Simplify the raw fal error blob for the user
+            if "downstream_service_error" in msg:
+                msg = (
+                    "Model error (downstream_service_error): the safety checker likely rejected "
+                    "the prompt or image. Try a less restrictive prompt or a different image."
+                )
+            yield sse({"status": "error", "message": msg, "progress": 0})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
