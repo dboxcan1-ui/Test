@@ -223,6 +223,7 @@ async def generate(
                 "elements": [{"frontal_image_url": primary_url}],
                 "aspect_ratio": aspect_ratio,
                 "cfg_scale": cfg_scale,
+                "enable_safety_checker": False,
             }
 
             result = None
