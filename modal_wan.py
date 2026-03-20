@@ -71,9 +71,14 @@ ASPECT_DIMS = {
 
 
 # ── Model download (run once: modal run modal_wan.py::download_model) ─────────
+# Reuse the same dotenv secret so HF_TOKEN is available for authenticated HF downloads.
+_dotenv_secrets = [modal.Secret.from_dotenv()] if Path(".env").exists() else []
+
+
 @app.function(
     image=gpu_image,
     volumes={str(MODEL_DIR): model_volume},
+    secrets=_dotenv_secrets,
     timeout=3600,
 )
 def download_model():
@@ -212,17 +217,16 @@ class WanGenerator:
 
 
 # ── Web endpoint ──────────────────────────────────────────────────────────────
-_web_secrets = [modal.Secret.from_dotenv()] if Path(".env").exists() else []
 
 
 @app.function(
     image=web_image,
     volumes={str(DATA_DIR): data_volume},
-    secrets=_web_secrets,
+    secrets=_dotenv_secrets,
     timeout=900,
     scaledown_window=60,
-    allow_concurrent_inputs=20,
 )
+@modal.concurrent(max_inputs=20)
 @modal.asgi_app()
 def web():
     import os
