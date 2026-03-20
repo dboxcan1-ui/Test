@@ -213,25 +213,38 @@ async def generate(
                 "enable_prompt_expansion": False,
             }
 
-            handle = await fal_client.submit_async(FAL_ENDPOINT, arguments=arguments)
-            yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id, "progress": 25})
+            result = None
+            for attempt in range(3):
+                try:
+                    handle = await fal_client.submit_async(FAL_ENDPOINT, arguments=arguments)
+                    yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id, "progress": 25})
 
-            logs_seen = 0
-            async for event in handle.iter_events(with_logs=True):
-                if isinstance(event, fal_client.Queued):
-                    yield sse({
-                        "status": "queued",
-                        "message": f"Position in queue: {event.position}",
-                        "position": event.position,
-                        "progress": 25,
-                    })
-                elif isinstance(event, (fal_client.InProgress, fal_client.Completed)):
-                    new_logs = event.logs[logs_seen:]
-                    logs_seen = len(event.logs)
-                    for log in new_logs:
-                        yield sse({"status": "processing", "message": log.get("message", ""), "progress": -1})
+                    logs_seen = 0
+                    async for event in handle.iter_events(with_logs=True):
+                        if isinstance(event, fal_client.Queued):
+                            yield sse({
+                                "status": "queued",
+                                "message": f"Position in queue: {event.position}",
+                                "position": event.position,
+                                "progress": 25,
+                            })
+                        elif isinstance(event, (fal_client.InProgress, fal_client.Completed)):
+                            new_logs = event.logs[logs_seen:]
+                            logs_seen = len(event.logs)
+                            for log in new_logs:
+                                yield sse({"status": "processing", "message": log.get("message", ""), "progress": -1})
 
-            result = await handle.get()
+                    result = await handle.get()
+                    break
+                except Exception as e:
+                    if "downstream_service_error" in str(e) and attempt < 2:
+                        wait = 2 ** attempt
+                        yield sse({"status": "queued", "message": f"Downstream error, retrying in {wait}s… (attempt {attempt+2}/3)", "progress": 20})
+                        await asyncio.sleep(wait)
+                    else:
+                        raise
+            if result is None:
+                raise RuntimeError("fal.ai downstream service failed after 3 attempts")
 
             video = result.get("video") or (result.get("videos") or [None])[0]
             if not video:
