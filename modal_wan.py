@@ -102,7 +102,7 @@ def download_model():
     model_volume.reload()
 
     repos = [
-        (WAN_BASE_ID, WAN_BASE_SUBDIR, "Wan2.1-T2V-1.3B.pth"),
+        (WAN_BASE_ID, WAN_BASE_SUBDIR, "diffusion_pytorch_model.safetensors"),
         (PHANTOM_ID,  PHANTOM_SUBDIR,  "Phantom-Wan-14B.pth"),
     ]
 
