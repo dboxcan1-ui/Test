@@ -210,6 +210,8 @@ async def generate(
                 "negative_prompt": negative_prompt,
                 "enable_safety_checker": False,
                 "enable_prompt_expansion": False,
+                "multi_shots": False,
+                "enable_audio": False,
             }
 
             result = None
