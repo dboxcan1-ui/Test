@@ -16,6 +16,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Strip any trailing whitespace/newlines from FAL_KEY (common copy-paste issue)
+if os.getenv("FAL_KEY"):
+    os.environ["FAL_KEY"] = os.environ["FAL_KEY"].strip()
+
 app = FastAPI(title="ref2vid")
 
 app.add_middleware(
