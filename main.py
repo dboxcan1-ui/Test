@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
+import io
 import fal_client
+from PIL import Image
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
@@ -38,7 +40,32 @@ def sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB (Kling limit is 10 MB)
+
+
+def compress_image(content: bytes, suffix: str) -> tuple[bytes, str]:
+    """Resize/recompress image to fit under MAX_UPLOAD_BYTES."""
+    if len(content) <= MAX_UPLOAD_BYTES:
+        return content, suffix
+    img = Image.open(io.BytesIO(content)).convert("RGB")
+    quality = 85
+    scale = 1.0
+    while True:
+        w, h = int(img.width * scale), int(img.height * scale)
+        resized = img.resize((w, h), Image.LANCZOS) if scale < 1.0 else img
+        buf = io.BytesIO()
+        resized.save(buf, format="JPEG", quality=quality)
+        data = buf.getvalue()
+        if len(data) <= MAX_UPLOAD_BYTES:
+            return data, ".jpg"
+        if quality > 60:
+            quality -= 10
+        else:
+            scale *= 0.8
+
+
 async def upload_image(content: bytes, suffix: str) -> str:
+    content, suffix = await asyncio.to_thread(compress_image, content, suffix)
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
         f.write(content)
         tmp_path = f.name
