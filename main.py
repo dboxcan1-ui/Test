@@ -2,13 +2,16 @@ import os
 import json
 import asyncio
 import tempfile
-from typing import List, Optional
+import shutil
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List
 
 import fal_client
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,6 +26,8 @@ app.add_middleware(
 )
 
 FAL_ENDPOINT = "wan/v2.6/reference-to-video/flash"
+REFS_DIR = Path("refs_store")
+REFS_DIR.mkdir(exist_ok=True)
 
 
 def sse(data: dict) -> str:
@@ -40,11 +45,96 @@ async def upload_image(content: bytes, suffix: str) -> str:
         os.unlink(tmp_path)
 
 
+# ── Static pages ──────────────────────────────────────────────────────────────
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     with open("index.html") as f:
         return f.read()
 
+
+# ── Reference library ─────────────────────────────────────────────────────────
+
+@app.get("/references")
+async def list_references():
+    refs = []
+    for d in sorted(REFS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+        meta_file = d / "meta.json"
+        if d.is_dir() and meta_file.exists():
+            refs.append(json.loads(meta_file.read_text()))
+    return refs
+
+
+@app.post("/references")
+async def save_reference(
+    name: str = Form(...),
+    images: List[UploadFile] = File(...),
+    weights: str = Form(default="[]"),
+    prompt: str = Form(default=""),
+):
+    if not name.strip():
+        raise HTTPException(400, "Name is required")
+    if len(images) < 2 or len(images) > 6:
+        raise HTTPException(400, f"Expected 2–6 images, got {len(images)}")
+
+    ref_id = uuid.uuid4().hex[:10]
+    ref_dir = REFS_DIR / ref_id
+    ref_dir.mkdir()
+
+    filenames = []
+    for i, img in enumerate(images):
+        suffix = Path(img.filename or "img.jpg").suffix or ".jpg"
+        fname = f"img_{i}{suffix}"
+        content = await img.read()
+        (ref_dir / fname).write_bytes(content)
+        filenames.append(fname)
+
+    try:
+        parsed_weights = json.loads(weights)
+    except Exception:
+        parsed_weights = [1.0] * len(images)
+
+    meta = {
+        "id": ref_id,
+        "name": name.strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "weights": parsed_weights,
+        "filenames": filenames,
+        "prompt": prompt,
+    }
+    (ref_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+    return meta
+
+
+@app.get("/references/{ref_id}")
+async def get_reference(ref_id: str):
+    meta_file = REFS_DIR / ref_id / "meta.json"
+    if not meta_file.exists():
+        raise HTTPException(404, "Reference set not found")
+    return json.loads(meta_file.read_text())
+
+
+@app.delete("/references/{ref_id}")
+async def delete_reference(ref_id: str):
+    ref_dir = REFS_DIR / ref_id
+    if not ref_dir.exists():
+        raise HTTPException(404, "Reference set not found")
+    shutil.rmtree(ref_dir)
+    return {"ok": True}
+
+
+@app.get("/references/{ref_id}/images/{filename}")
+async def get_reference_image(ref_id: str, filename: str):
+    # Prevent path traversal
+    if "/" in filename or "\\" in filename or filename.startswith("."):
+        raise HTTPException(400, "Invalid filename")
+    path = REFS_DIR / ref_id / filename
+    if not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path)
+
+
+# ── Video generation ──────────────────────────────────────────────────────────
 
 @app.post("/generate")
 async def generate(
@@ -52,7 +142,7 @@ async def generate(
     prompt: str = Form(...),
     negative_prompt: str = Form(default="low resolution, blurry, worst quality, artifacts"),
     image_weights: str = Form(default="[]"),
-    aspect_ratio: str = Form(default="16:9"),
+    aspect_ratio: str = Form(default="9:16"),
     resolution: str = Form(default="720p"),
     duration: str = Form(default="5"),
     motion_strength: float = Form(default=0.5),
@@ -67,21 +157,16 @@ async def generate(
             yield sse({"status": "error", "message": f"Expected 2–6 images, got {len(images)}."})
         return StreamingResponse(err(), media_type="text/event-stream")
 
-    # Parse per-image weights; sort highest-weight images first (Character1 = most prominent)
     try:
         weights = json.loads(image_weights)
     except Exception:
         weights = [1.0] * len(images)
-
     while len(weights) < len(images):
         weights.append(1.0)
 
-    # Pair images with their weights and sort descending so Character1 = highest weight
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
-    # Augment prompt with motion keywords based on motion_strength
-    motion_tag = ""
     if motion_strength < 0.3:
         motion_tag = " Subtle, gentle motion."
     elif motion_strength < 0.6:
@@ -91,7 +176,6 @@ async def generate(
     else:
         motion_tag = " Highly dynamic, energetic motion with strong movement."
 
-    # Auto-inject Character references if not already in prompt
     char_refs = [f"Character{i+1}" for i in range(len(sorted_images))]
     full_prompt = prompt
     if not any(c in prompt for c in char_refs):
@@ -101,20 +185,18 @@ async def generate(
 
     async def event_stream():
         try:
-            # Step 1: Upload images
             yield sse({"status": "uploading", "message": f"Uploading {len(sorted_images)} image(s) to fal storage…"})
 
             image_urls = []
             for i, img in enumerate(sorted_images):
                 suffix = os.path.splitext(img.filename or ".jpg")[1] or ".jpg"
                 content = await img.read()
-                yield sse({"status": "uploading", "message": f"Uploading image {i+1}/{len(sorted_images)}…"})
+                yield sse({"status": "uploading", "message": f"Uploading image {i+1}/{len(sorted_images)}…", "progress": 5 + (i * 10)})
                 url = await upload_image(content, suffix)
                 image_urls.append(url)
 
-            yield sse({"status": "submitted", "message": "All images uploaded. Submitting to fal.ai…"})
+            yield sse({"status": "submitted", "message": "All images uploaded. Submitting to fal.ai…", "progress": 20})
 
-            # Step 2: Submit job
             arguments = {
                 "prompt": full_prompt,
                 "image_urls": image_urls,
@@ -128,9 +210,8 @@ async def generate(
             }
 
             handle = await fal_client.submit_async(FAL_ENDPOINT, arguments=arguments)
-            yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id})
+            yield sse({"status": "queued", "message": "Job queued. Waiting for a worker…", "request_id": handle.request_id, "progress": 25})
 
-            # Step 3: Poll for progress
             logs_seen = 0
             async for event in handle.iter_events(with_logs=True):
                 if isinstance(event, fal_client.Queued):
@@ -138,14 +219,14 @@ async def generate(
                         "status": "queued",
                         "message": f"Position in queue: {event.position}",
                         "position": event.position,
+                        "progress": 25,
                     })
                 elif isinstance(event, (fal_client.InProgress, fal_client.Completed)):
                     new_logs = event.logs[logs_seen:]
                     logs_seen = len(event.logs)
                     for log in new_logs:
-                        yield sse({"status": "processing", "message": log.get("message", "")})
+                        yield sse({"status": "processing", "message": log.get("message", ""), "progress": -1})
 
-            # Step 4: Get result
             result = await handle.get()
 
             video = result.get("video") or (result.get("videos") or [None])[0]
@@ -159,9 +240,10 @@ async def generate(
                 "message": "Video ready!",
                 "video_url": video_url,
                 "prompt_used": full_prompt,
+                "progress": 100,
             })
 
         except Exception as exc:
-            yield sse({"status": "error", "message": str(exc)})
+            yield sse({"status": "error", "message": str(exc), "progress": 0})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

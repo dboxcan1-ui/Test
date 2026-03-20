@@ -26,27 +26,23 @@
       color: var(--text);
       font-family: 'Inter', system-ui, sans-serif;
       min-height: 100vh;
-      padding: 2rem 1rem;
+      padding: 2rem 1rem 4rem;
     }
 
-    h1 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-bottom: 0.25rem;
-    }
+    h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.25rem; }
     h1 span { color: var(--accent); }
     .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem; }
 
     .layout {
-      max-width: 900px;
+      max-width: 1100px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
+      grid-template-columns: 320px 1fr 340px;
+      gap: 1.25rem;
+      align-items: start;
     }
-
-    @media (max-width: 680px) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px) { .layout { grid-template-columns: 1fr; } }
 
     .panel {
       background: var(--surface);
@@ -54,9 +50,8 @@
       border-radius: 12px;
       padding: 1.25rem;
     }
-
     .panel h2 {
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -64,40 +59,28 @@
       margin-bottom: 1rem;
     }
 
-    /* Drop zone */
+    /* ── Drop zone ── */
     #drop-zone {
       border: 2px dashed var(--border);
       border-radius: 8px;
-      padding: 2rem 1rem;
+      padding: 1.5rem 1rem;
       text-align: center;
       cursor: pointer;
       transition: border-color 0.2s, background 0.2s;
       color: var(--text-dim);
-      font-size: 0.875rem;
+      font-size: 0.85rem;
     }
-    #drop-zone.drag-over {
-      border-color: var(--accent);
-      background: rgba(124, 106, 247, 0.06);
-      color: var(--text);
-    }
-    #drop-zone svg { display: block; margin: 0 auto 0.6rem; opacity: 0.5; }
+    #drop-zone.drag-over { border-color: var(--accent); background: rgba(124,106,247,0.06); color: var(--text); }
+    #drop-zone svg { display: block; margin: 0 auto 0.5rem; opacity: 0.45; }
     #file-input { display: none; }
+    .img-count { margin-top: 0.4rem; font-size: 0.72rem; color: var(--text-dim); text-align: center; }
 
-    .img-count {
-      margin-top: 0.5rem;
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      text-align: center;
-    }
-
-    /* Image grid */
     #image-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-      gap: 0.75rem;
-      margin-top: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+      gap: 0.6rem;
+      margin-top: 0.85rem;
     }
-
     .img-card {
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -105,598 +88,659 @@
       overflow: hidden;
       position: relative;
     }
-    .img-card img {
-      width: 100%;
-      aspect-ratio: 1;
-      object-fit: cover;
-      display: block;
-    }
+    .img-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
     .img-card .badge {
-      position: absolute;
-      top: 4px; left: 4px;
-      background: rgba(0,0,0,0.7);
-      color: var(--accent);
-      font-size: 0.65rem;
-      font-weight: 700;
-      padding: 2px 5px;
-      border-radius: 4px;
+      position: absolute; top: 3px; left: 3px;
+      background: rgba(0,0,0,0.72); color: var(--accent);
+      font-size: 0.6rem; font-weight: 700; padding: 1px 4px; border-radius: 3px;
     }
     .img-card .remove-btn {
-      position: absolute;
-      top: 4px; right: 4px;
-      background: rgba(0,0,0,0.7);
-      border: none;
-      color: var(--text-dim);
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      cursor: pointer;
-      font-size: 11px;
-      display: flex; align-items: center; justify-content: center;
-      line-height: 1;
+      position: absolute; top: 3px; right: 3px;
+      background: rgba(0,0,0,0.72); border: none; color: var(--text-dim);
+      width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
+      font-size: 10px; display: flex; align-items: center; justify-content: center;
     }
     .img-card .remove-btn:hover { color: var(--red); }
+    .weight-row { padding: 0.3rem 0.4rem; }
+    .weight-row label { font-size: 0.6rem; color: var(--text-dim); display: flex; justify-content: space-between; margin-bottom: 2px; }
+    .weight-row input[type=range] { width: 100%; accent-color: var(--accent); height: 2px; }
 
-    .weight-row {
-      padding: 0.4rem 0.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+    /* ── Save-as-reference row ── */
+    .save-ref-row {
+      display: flex; gap: 0.5rem; margin-top: 0.9rem; align-items: center;
     }
-    .weight-row label {
-      font-size: 0.65rem;
-      color: var(--text-dim);
-      display: flex;
-      justify-content: space-between;
+    .save-ref-row input[type=text] {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 0.45rem 0.6rem;
+      font-size: 0.8rem; font-family: inherit; outline: none;
     }
-    .weight-row input[type=range] {
-      width: 100%;
-      accent-color: var(--accent);
-      height: 3px;
+    .save-ref-row input[type=text]:focus { border-color: var(--accent); }
+    .btn-sm {
+      padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.78rem;
+      font-weight: 500; cursor: pointer; border: none; white-space: nowrap;
     }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover:not(:disabled) { background: #9183fa; }
+    .btn-accent:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-ghost { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+    .btn-danger:hover { border-color: var(--red); color: var(--red); }
 
-    /* Form fields */
-    .field { margin-bottom: 1rem; }
-    .field label {
-      display: block;
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      margin-bottom: 0.4rem;
+    /* ── References library ── */
+    #refs-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    .ref-card {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.65rem 0.75rem; cursor: pointer; transition: border-color 0.15s;
     }
-
-    textarea, select {
-      width: 100%;
-      background: var(--surface2);
+    .ref-card:hover { border-color: var(--accent); }
+    .ref-card.active { border-color: var(--accent); background: rgba(124,106,247,0.08); }
+    .ref-card-top { display: flex; justify-content: space-between; align-items: center; }
+    .ref-card-name { font-size: 0.85rem; font-weight: 600; }
+    .ref-card-meta { font-size: 0.68rem; color: var(--text-dim); margin-top: 3px; }
+    .ref-thumbs { display: flex; gap: 3px; margin-top: 0.5rem; overflow: hidden; }
+    .ref-thumbs img {
+      width: 32px; height: 32px; object-fit: cover; border-radius: 4px;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      padding: 0.6rem 0.75rem;
-      font-size: 0.875rem;
-      font-family: inherit;
-      resize: vertical;
-      outline: none;
+    }
+    .ref-card-actions { display: flex; gap: 0.35rem; }
+    .empty-state { font-size: 0.78rem; color: var(--text-dim); text-align: center; padding: 1.5rem 0; }
+
+    /* ── Settings ── */
+    .field { margin-bottom: 0.9rem; }
+    .field label { display: block; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.3rem; }
+    textarea, select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 0.55rem 0.7rem;
+      font-size: 0.85rem; font-family: inherit; resize: vertical; outline: none;
       transition: border-color 0.15s;
     }
     textarea:focus, select:focus { border-color: var(--accent); }
-
-    .hint {
-      margin-top: 0.4rem;
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      line-height: 1.5;
-    }
-    .hint code {
-      background: var(--surface2);
-      padding: 1px 4px;
-      border-radius: 3px;
-      color: var(--accent);
-    }
-
-    .row { display: flex; gap: 0.75rem; }
+    .hint { margin-top: 0.35rem; font-size: 0.68rem; color: var(--text-dim); line-height: 1.5; }
+    .hint code { background: var(--surface2); padding: 1px 4px; border-radius: 3px; color: var(--accent); }
+    .row { display: flex; gap: 0.6rem; }
     .row .field { flex: 1; }
-
-    input[type=range] {
-      width: 100%;
-      accent-color: var(--accent);
-    }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .slider-val {
-      min-width: 2.5rem;
-      text-align: right;
-      font-size: 0.8rem;
-      color: var(--text-dim);
-    }
+    .slider-row { display: flex; align-items: center; gap: 0.4rem; }
+    input[type=range] { width: 100%; accent-color: var(--accent); }
+    .slider-val { min-width: 2.2rem; text-align: right; font-size: 0.78rem; color: var(--text-dim); }
 
     button#generate-btn {
-      width: 100%;
-      padding: 0.75rem;
-      background: var(--accent);
-      border: none;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s, opacity 0.15s;
-      margin-top: 0.5rem;
+      width: 100%; padding: 0.7rem; background: var(--accent); border: none;
+      border-radius: 8px; color: #fff; font-size: 0.92rem; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, opacity 0.15s; margin-top: 0.4rem;
     }
     button#generate-btn:hover:not(:disabled) { background: #9183fa; }
-    button#generate-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    button#generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* Right panel */
-    .right-panel { display: flex; flex-direction: column; gap: 1.5rem; }
-
-    /* Progress */
+    /* ── Progress ── */
     #progress-panel { display: none; }
     #progress-panel.visible { display: block; }
 
     .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 20px;
-      margin-bottom: 0.75rem;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.78rem; font-weight: 600; padding: 3px 10px;
+      border-radius: 20px; margin-bottom: 0.6rem;
     }
     .status-badge.uploading  { background: rgba(251,191,36,0.15); color: var(--yellow); }
     .status-badge.queued     { background: rgba(124,106,247,0.15); color: var(--accent); }
     .status-badge.processing { background: rgba(124,106,247,0.15); color: var(--accent); }
     .status-badge.complete   { background: rgba(74,222,128,0.15);  color: var(--green); }
     .status-badge.error      { background: rgba(248,113,113,0.15); color: var(--red); }
-
-    .dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: currentColor;
-    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .dot.pulse { animation: pulse 1.2s ease-in-out infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
+    /* Timer + ETA */
+    .timer-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.4rem;
+    }
+    .timer-row strong { color: var(--text); font-variant-numeric: tabular-nums; }
+    .eta { color: var(--text-dim); }
+    .eta strong { color: var(--yellow); }
+
+    .progress-wrap { background: var(--surface2); border-radius: 4px; height: 5px; margin-bottom: 0.75rem; overflow: hidden; }
+    .progress-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.6s ease; width: 0%; }
+    .progress-bar.indeterminate { width: 40%; animation: slide 1.5s ease-in-out infinite; }
+    @keyframes slide { 0%{transform:translateX(-120%)} 100%{transform:translateX(350%)} }
+
     #log-box {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.75rem;
-      height: 130px;
-      overflow-y: auto;
-      font-size: 0.75rem;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      color: var(--text-dim);
-      line-height: 1.6;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.65rem; height: 120px; overflow-y: auto;
+      font-size: 0.72rem; font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      color: var(--text-dim); line-height: 1.6;
     }
-    #log-box .log-line { margin-bottom: 2px; }
-    #log-box .log-line.info  { color: var(--text-dim); }
-    #log-box .log-line.ok    { color: var(--green); }
-    #log-box .log-line.warn  { color: var(--yellow); }
-    #log-box .log-line.err   { color: var(--red); }
+    .log-line.ok  { color: var(--green); }
+    .log-line.err { color: var(--red); }
+    .log-line.warn{ color: var(--yellow); }
 
-    /* Progress bar */
-    .progress-wrap {
-      background: var(--surface2);
-      border-radius: 4px;
-      height: 4px;
-      margin: 0.75rem 0;
-      overflow: hidden;
-    }
-    .progress-bar {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 4px;
-      transition: width 0.4s ease;
-      width: 0%;
-    }
-    .progress-bar.indeterminate {
-      width: 40%;
-      animation: slide 1.4s ease-in-out infinite;
-    }
-    @keyframes slide {
-      0%   { transform: translateX(-100%); }
-      100% { transform: translateX(350%); }
-    }
-
-    /* Video */
+    /* ── Video ── */
     #video-panel { display: none; }
     #video-panel.visible { display: block; }
-
-    #video-player {
-      width: 100%;
-      border-radius: 8px;
-      background: #000;
-      display: block;
-    }
-
-    .video-actions {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-    }
+    #video-player { width: 100%; border-radius: 8px; background: #000; display: block; }
+    .video-actions { display: flex; gap: 0.5rem; margin-top: 0.65rem; }
     .video-actions a, .video-actions button {
-      flex: 1;
-      text-align: center;
-      padding: 0.5rem;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      cursor: pointer;
-      text-decoration: none;
+      flex: 1; text-align: center; padding: 0.45rem; border-radius: 6px;
+      font-size: 0.78rem; font-weight: 500; cursor: pointer; text-decoration: none;
     }
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-    }
-    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-primary {
-      background: var(--accent);
-      border: 1px solid var(--accent);
-      color: #fff;
-    }
-    .btn-primary:hover { background: #9183fa; }
-
     .prompt-used {
-      margin-top: 0.75rem;
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      background: var(--surface2);
-      border-radius: 6px;
-      padding: 0.5rem 0.75rem;
-      line-height: 1.5;
-      word-break: break-word;
+      margin-top: 0.65rem; font-size: 0.68rem; color: var(--text-dim);
+      background: var(--surface2); border-radius: 6px; padding: 0.5rem 0.65rem;
+      line-height: 1.5; word-break: break-word;
     }
     .prompt-used strong { color: var(--text-dim); display: block; margin-bottom: 2px; }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
+    /* ── Idle ── */
+    #idle-panel ol { padding-left: 1.2rem; font-size: 0.8rem; color: var(--text-dim); line-height: 2.2; }
+    #idle-panel code { color: var(--accent); background: var(--surface2); padding: 1px 4px; border-radius: 3px; }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   </style>
 </head>
 <body>
-  <div style="max-width:900px;margin:0 auto 1.5rem">
-    <h1><span>ref2vid</span></h1>
-    <p class="subtitle">Multi-reference image to video &mdash; powered by Wan 2.6 R2V via fal.ai</p>
-  </div>
+<div style="max-width:1100px;margin:0 auto 1.5rem">
+  <h1><span>ref2vid</span></h1>
+  <p class="subtitle">Multi-reference image to video &mdash; Wan 2.6 R2V Flash via fal.ai</p>
+</div>
 
-  <div class="layout">
-    <!-- LEFT: inputs -->
-    <div>
-      <div class="panel">
-        <h2>Reference Images (2 – 6)</h2>
+<div class="layout">
 
-        <div id="drop-zone" role="button" tabindex="0" aria-label="Drop images here">
-          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-            <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Drop images here or <strong>click to browse</strong>
-        </div>
-        <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/bmp" multiple />
-        <p class="img-count" id="img-count">0 / 6 images added</p>
-        <div id="image-grid"></div>
-      </div>
+  <!-- COL 1: References library -->
+  <div style="display:flex;flex-direction:column;gap:1.25rem">
 
-      <div class="panel" style="margin-top:1.5rem">
-        <h2>Generation Settings</h2>
-
-        <div class="field">
-          <label>Prompt</label>
-          <textarea id="prompt" rows="4" placeholder="e.g. Character1 and Character2 walk through a neon-lit Tokyo street at night, cinematic motion"></textarea>
-          <p class="hint">
-            Use <code>Character1</code>, <code>Character2</code>, … to reference your images.<br>
-            If omitted, they are injected automatically. Images are sorted by weight (highest = Character1).
-          </p>
-        </div>
-
-        <div class="field">
-          <label>Negative Prompt (optional)</label>
-          <textarea id="neg-prompt" rows="2">low resolution, blurry, worst quality, artifacts, distorted</textarea>
-        </div>
-
-        <div class="row">
-          <div class="field">
-            <label>Aspect Ratio</label>
-            <select id="aspect-ratio">
-              <option value="16:9">16:9 (landscape)</option>
-              <option value="9:16" selected>9:16 (portrait)</option>
-              <option value="1:1">1:1 (square)</option>
-              <option value="4:3">4:3</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Resolution</label>
-            <select id="resolution">
-              <option value="480p">480p</option>
-              <option value="720p" selected>720p</option>
-              <option value="1080p">1080p</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Duration</label>
-            <select id="duration">
-              <option value="5" selected>5 s</option>
-              <option value="10">10 s</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Motion Strength</label>
-          <div class="slider-row">
-            <input type="range" id="motion-strength" min="0" max="1" step="0.05" value="0.5" />
-            <span class="slider-val" id="motion-val">0.50</span>
-          </div>
-          <p class="hint">Low = subtle motion &nbsp;|&nbsp; High = energetic movement (influences prompt keywords)</p>
-        </div>
-
-        <button id="generate-btn" disabled>Generate Video</button>
+    <div class="panel">
+      <h2>References Library</h2>
+      <div id="refs-list">
+        <p class="empty-state" id="refs-empty">No saved reference sets yet.</p>
       </div>
     </div>
 
-    <!-- RIGHT: status + result -->
-    <div class="right-panel">
-      <div class="panel" id="progress-panel">
-        <h2>Generation Progress</h2>
-        <div id="status-badge" class="status-badge uploading">
-          <span class="dot pulse"></span>
-          <span id="status-text">Starting…</span>
-        </div>
-        <div class="progress-wrap"><div class="progress-bar indeterminate" id="progress-bar"></div></div>
-        <div id="log-box"></div>
+    <div class="panel">
+      <h2>Drop Images (2 – 6)</h2>
+      <div id="drop-zone" role="button" tabindex="0">
+        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Drop images or <strong>click to browse</strong>
       </div>
+      <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/bmp" multiple />
+      <p class="img-count" id="img-count">0 / 6 images</p>
+      <div id="image-grid"></div>
 
-      <div class="panel" id="video-panel">
-        <h2>Output Video</h2>
-        <video id="video-player" controls playsinline></video>
-        <div class="video-actions">
-          <a id="download-link" class="btn-primary" download="ref2vid.mp4">Download MP4</a>
-          <button class="btn-outline" id="reset-btn">New Generation</button>
-        </div>
-        <div class="prompt-used" id="prompt-used" style="display:none">
-          <strong>Prompt sent to model:</strong>
-          <span id="prompt-used-text"></span>
-        </div>
-      </div>
-
-      <!-- Idle placeholder -->
-      <div class="panel" id="idle-panel">
-        <h2>How it works</h2>
-        <ol style="padding-left:1.2rem;font-size:0.82rem;color:var(--text-dim);line-height:2">
-          <li>Drop 2–6 reference images</li>
-          <li>Adjust per-image weights (higher weight = Character1)</li>
-          <li>Write a prompt using <code style="color:var(--accent);background:var(--surface2);padding:1px 4px;border-radius:3px">Character1</code>, <code style="color:var(--accent);background:var(--surface2);padding:1px 4px;border-radius:3px">Character2</code>…</li>
-          <li>Choose aspect ratio, resolution, duration</li>
-          <li>Hit <strong>Generate Video</strong></li>
-        </ol>
-        <p style="margin-top:1rem;font-size:0.75rem;color:var(--text-dim)">
-          Uses <strong>Wan 2.6 R2V Flash</strong> via fal.ai — no local GPU required.<br>
-          Safety checker is disabled.
-        </p>
+      <div class="save-ref-row">
+        <input type="text" id="ref-name-input" placeholder="Name this reference set…" />
+        <button class="btn-sm btn-accent" id="save-ref-btn" disabled>Save</button>
       </div>
     </div>
   </div>
 
-  <script>
-    const dropZone     = document.getElementById('drop-zone');
-    const fileInput    = document.getElementById('file-input');
-    const imgGrid      = document.getElementById('image-grid');
-    const imgCount     = document.getElementById('img-count');
-    const generateBtn  = document.getElementById('generate-btn');
-    const progressPanel= document.getElementById('progress-panel');
-    const videoPanel   = document.getElementById('video-panel');
-    const idlePanel    = document.getElementById('idle-panel');
-    const logBox       = document.getElementById('log-box');
-    const statusBadge  = document.getElementById('status-badge');
-    const statusText   = document.getElementById('status-text');
-    const progressBar  = document.getElementById('progress-bar');
-    const videoPlayer  = document.getElementById('video-player');
-    const downloadLink = document.getElementById('download-link');
-    const resetBtn     = document.getElementById('reset-btn');
-    const motionSlider = document.getElementById('motion-strength');
-    const motionVal    = document.getElementById('motion-val');
+  <!-- COL 2: Settings + Generate -->
+  <div class="panel">
+    <h2>Generation Settings</h2>
 
-    let imageFiles = [];   // {file, weight, previewUrl}
+    <div class="field">
+      <label>Prompt</label>
+      <textarea id="prompt" rows="4" placeholder="e.g. Character1 and Character2 walk through a neon-lit Tokyo street at night, cinematic motion"></textarea>
+      <p class="hint">
+        Use <code>Character1</code>, <code>Character2</code>… to reference your images (sorted by weight).<br>
+        They are auto-injected if omitted.
+      </p>
+    </div>
 
-    // ── Drag & drop ──────────────────────────────────────────────
-    dropZone.addEventListener('click', () => fileInput.click());
-    dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
-      addFiles([...e.dataTransfer.files]);
-    });
-    fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+    <div class="field">
+      <label>Negative Prompt</label>
+      <textarea id="neg-prompt" rows="2">low resolution, blurry, worst quality, artifacts, distorted</textarea>
+    </div>
 
-    function addFiles(files) {
-      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp'];
-      for (const f of files) {
-        if (!allowed.includes(f.type)) continue;
-        if (imageFiles.length >= 6) break;
-        const url = URL.createObjectURL(f);
-        imageFiles.push({ file: f, weight: 1.0, previewUrl: url });
-      }
-      renderGrid();
-    }
+    <div class="row">
+      <div class="field">
+        <label>Aspect Ratio</label>
+        <select id="aspect-ratio">
+          <option value="16:9">16:9</option>
+          <option value="9:16" selected>9:16 (portrait)</option>
+          <option value="1:1">1:1</option>
+          <option value="4:3">4:3</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Resolution</label>
+        <select id="resolution">
+          <option value="480p">480p</option>
+          <option value="720p" selected>720p</option>
+          <option value="1080p">1080p</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Duration</label>
+        <select id="duration">
+          <option value="5" selected>5 s</option>
+          <option value="10">10 s</option>
+        </select>
+      </div>
+    </div>
 
-    function removeImage(idx) {
-      URL.revokeObjectURL(imageFiles[idx].previewUrl);
-      imageFiles.splice(idx, 1);
-      renderGrid();
-    }
+    <div class="field">
+      <label>Motion Strength</label>
+      <div class="slider-row">
+        <input type="range" id="motion-strength" min="0" max="1" step="0.05" value="0.5" />
+        <span class="slider-val" id="motion-val">0.50</span>
+      </div>
+      <p class="hint">Low = subtle &nbsp;|&nbsp; High = energetic (appended as prompt keywords)</p>
+    </div>
 
-    function renderGrid() {
-      imgGrid.innerHTML = '';
-      imageFiles.forEach((item, i) => {
-        const card = document.createElement('div');
-        card.className = 'img-card';
-        card.innerHTML = `
-          <img src="${item.previewUrl}" alt="ref ${i+1}" />
-          <span class="badge">C${i+1}</span>
-          <button class="remove-btn" data-idx="${i}" title="Remove">✕</button>
-          <div class="weight-row">
-            <label>Weight <span class="wv">${item.weight.toFixed(2)}</span></label>
-            <input type="range" min="0.1" max="2" step="0.05" value="${item.weight}" data-idx="${i}" />
-          </div>`;
-        imgGrid.appendChild(card);
-      });
+    <button id="generate-btn" disabled>Generate Video</button>
+  </div>
 
-      // Weight sliders
-      imgGrid.querySelectorAll('input[type=range]').forEach(sl => {
-        sl.addEventListener('input', function() {
-          const idx = parseInt(this.dataset.idx);
-          imageFiles[idx].weight = parseFloat(this.value);
-          this.closest('.img-card').querySelector('.wv').textContent = imageFiles[idx].weight.toFixed(2);
-        });
-      });
+  <!-- COL 3: Progress + Result -->
+  <div style="display:flex;flex-direction:column;gap:1.25rem">
 
-      // Remove buttons
-      imgGrid.querySelectorAll('.remove-btn').forEach(btn => {
-        btn.addEventListener('click', function() { removeImage(parseInt(this.dataset.idx)); });
-      });
+    <div class="panel" id="progress-panel">
+      <h2>Generation Progress</h2>
+      <div id="status-badge" class="status-badge uploading">
+        <span class="dot pulse"></span>
+        <span id="status-text">Starting…</span>
+      </div>
 
-      imgCount.textContent = `${imageFiles.length} / 6 images added`;
-      generateBtn.disabled = imageFiles.length < 2;
-    }
+      <div class="timer-row">
+        <span>Elapsed: <strong id="elapsed-display">0:00</strong></span>
+        <span class="eta">ETA: <strong id="eta-display">—</strong></span>
+      </div>
 
-    // ── Motion strength slider ────────────────────────────────────
-    motionSlider.addEventListener('input', function() {
-      motionVal.textContent = parseFloat(this.value).toFixed(2);
-    });
+      <div class="progress-wrap">
+        <div class="progress-bar indeterminate" id="progress-bar"></div>
+      </div>
+      <div id="log-box"></div>
+    </div>
 
-    // ── Generate ─────────────────────────────────────────────────
-    generateBtn.addEventListener('click', startGeneration);
+    <div class="panel" id="video-panel">
+      <h2>Output Video</h2>
+      <video id="video-player" controls playsinline></video>
+      <div class="video-actions">
+        <a id="download-link" class="btn-sm btn-accent" download="ref2vid.mp4">Download MP4</a>
+        <button class="btn-sm btn-ghost" id="reset-btn">New Generation</button>
+      </div>
+      <div class="prompt-used" id="prompt-used" style="display:none">
+        <strong>Prompt sent to model:</strong>
+        <span id="prompt-used-text"></span>
+      </div>
+    </div>
 
-    async function startGeneration() {
-      if (imageFiles.length < 2) return;
+    <div class="panel" id="idle-panel">
+      <h2>How it works</h2>
+      <ol>
+        <li>Load a saved reference set <em>or</em> drop 2–6 images</li>
+        <li>Adjust per-image weights (highest = Character1)</li>
+        <li>Write a prompt using <code>Character1</code>, <code>Character2</code>…</li>
+        <li>Hit <strong>Generate Video</strong></li>
+        <li>Save image sets to the library for quick reuse</li>
+      </ol>
+      <p style="margin-top:0.9rem;font-size:0.72rem;color:var(--text-dim)">
+        Wan 2.6 R2V Flash · 9:16 · 720p · 5s by default<br>Safety checker disabled.
+      </p>
+    </div>
 
-      generateBtn.disabled = true;
-      idlePanel.style.display = 'none';
-      videoPanel.classList.remove('visible');
-      progressPanel.classList.add('visible');
-      logBox.innerHTML = '';
-      setStatus('uploading', 'Preparing…');
+  </div>
+</div>
 
-      const formData = new FormData();
-      imageFiles.forEach(({ file }) => formData.append('images', file));
-      formData.append('prompt',          document.getElementById('prompt').value.trim() || 'A cinematic video featuring the referenced characters.');
-      formData.append('negative_prompt', document.getElementById('neg-prompt').value.trim());
-      formData.append('aspect_ratio',    document.getElementById('aspect-ratio').value);
-      formData.append('resolution',      document.getElementById('resolution').value);
-      formData.append('duration',        document.getElementById('duration').value);
-      formData.append('motion_strength', motionSlider.value);
-      formData.append('image_weights',   JSON.stringify(imageFiles.map(f => f.weight)));
+<script>
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const dropZone      = document.getElementById('drop-zone');
+  const fileInput     = document.getElementById('file-input');
+  const imgGrid       = document.getElementById('image-grid');
+  const imgCount      = document.getElementById('img-count');
+  const generateBtn   = document.getElementById('generate-btn');
+  const saveRefBtn    = document.getElementById('save-ref-btn');
+  const refNameInput  = document.getElementById('ref-name-input');
+  const refsList      = document.getElementById('refs-list');
+  const refsEmpty     = document.getElementById('refs-empty');
+  const progressPanel = document.getElementById('progress-panel');
+  const videoPanel    = document.getElementById('video-panel');
+  const idlePanel     = document.getElementById('idle-panel');
+  const logBox        = document.getElementById('log-box');
+  const statusBadge   = document.getElementById('status-badge');
+  const statusText    = document.getElementById('status-text');
+  const progressBar   = document.getElementById('progress-bar');
+  const videoPlayer   = document.getElementById('video-player');
+  const downloadLink  = document.getElementById('download-link');
+  const resetBtn      = document.getElementById('reset-btn');
+  const motionSlider  = document.getElementById('motion-strength');
+  const motionVal     = document.getElementById('motion-val');
+  const elapsedDisplay= document.getElementById('elapsed-display');
+  const etaDisplay    = document.getElementById('eta-display');
 
-      try {
-        const resp = await fetch('/generate', { method: 'POST', body: formData });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  let imageFiles = []; // [{file, weight, previewUrl}]
 
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '';
+  // ETA model: typical R2V Flash durations by resolution
+  const ETA_SECONDS = { '480p': 45, '720p': 75, '1080p': 120 };
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop();
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            let evt;
-            try { evt = JSON.parse(line.slice(6)); } catch { continue; }
-            handleEvent(evt);
-          }
-        }
-      } catch (err) {
-        handleEvent({ status: 'error', message: err.message });
-      }
-    }
+  // ── Timer ─────────────────────────────────────────────────────────────────
+  let timerInterval = null;
+  let genStartTime  = null;
+  let processingStartTime = null;
 
-    function handleEvent(evt) {
-      const { status, message, video_url, position, prompt_used } = evt;
+  function startTimer() {
+    genStartTime = Date.now();
+    processingStartTime = null;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimer, 500);
+  }
 
-      switch (status) {
-        case 'uploading':
-          setStatus('uploading', message);
-          addLog(message, 'info');
-          break;
-        case 'submitted':
-          setStatus('queued', message);
-          addLog(message, 'info');
-          break;
-        case 'queued':
-          setStatus('queued', position != null ? `Queue position: ${position}` : message);
-          addLog(message, 'info');
-          break;
-        case 'processing':
-          setStatus('processing', 'Generating video…');
-          if (message) addLog(message, 'info');
-          break;
-        case 'complete':
-          setStatus('complete', 'Done!');
-          addLog('Video ready!', 'ok');
-          showVideo(video_url, evt.prompt_used);
-          generateBtn.disabled = false;
-          break;
-        case 'error':
-          setStatus('error', 'Error');
-          addLog('Error: ' + message, 'err');
-          generateBtn.disabled = false;
-          break;
-      }
-    }
+  function stopTimer() { clearInterval(timerInterval); }
 
-    function setStatus(state, label) {
-      statusBadge.className = `status-badge ${state}`;
-      statusText.textContent = label;
-      const dot = statusBadge.querySelector('.dot');
+  function updateTimer() {
+    const elapsed = Math.floor((Date.now() - genStartTime) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    elapsedDisplay.textContent = `${m}:${s.toString().padStart(2,'0')}`;
 
-      if (state === 'complete' || state === 'error') {
-        dot.classList.remove('pulse');
-        progressBar.classList.remove('indeterminate');
-        progressBar.style.width = state === 'complete' ? '100%' : '0%';
+    if (processingStartTime) {
+      const resolution = document.getElementById('resolution').value;
+      const target = ETA_SECONDS[resolution] || 75;
+      const procElapsed = (Date.now() - processingStartTime) / 1000;
+      const remaining = Math.max(0, Math.ceil(target - procElapsed));
+      if (remaining > 0) {
+        etaDisplay.textContent = `~${remaining}s`;
       } else {
-        dot.classList.add('pulse');
-        progressBar.classList.add('indeterminate');
+        etaDisplay.textContent = 'finishing…';
       }
     }
+  }
 
-    function addLog(msg, type = 'info') {
-      if (!msg) return;
-      const line = document.createElement('div');
-      line.className = `log-line ${type}`;
-      const ts = new Date().toLocaleTimeString('en', { hour12: false });
-      line.textContent = `[${ts}] ${msg}`;
-      logBox.appendChild(line);
-      logBox.scrollTop = logBox.scrollHeight;
+  // ── Drag & drop ───────────────────────────────────────────────────────────
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles([...e.dataTransfer.files]); });
+  fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+  function addFiles(files) {
+    const allowed = ['image/jpeg','image/png','image/webp','image/bmp'];
+    for (const f of files) {
+      if (!allowed.includes(f.type)) continue;
+      if (imageFiles.length >= 6) break;
+      imageFiles.push({ file: f, weight: 1.0, previewUrl: URL.createObjectURL(f) });
     }
+    renderGrid();
+  }
 
-    function showVideo(url, promptUsed) {
-      videoPlayer.src = url;
-      videoPlayer.load();
-      videoPlayer.play().catch(() => {});
-      downloadLink.href = url;
-      videoPanel.classList.add('visible');
+  function removeImage(idx) {
+    URL.revokeObjectURL(imageFiles[idx].previewUrl);
+    imageFiles.splice(idx, 1);
+    renderGrid();
+  }
 
-      if (promptUsed) {
-        document.getElementById('prompt-used').style.display = 'block';
-        document.getElementById('prompt-used-text').textContent = promptUsed;
-      }
-    }
-
-    resetBtn.addEventListener('click', () => {
-      videoPanel.classList.remove('visible');
-      progressPanel.classList.remove('visible');
-      idlePanel.style.display = '';
-      videoPlayer.src = '';
-      document.getElementById('prompt-used').style.display = 'none';
-      generateBtn.disabled = imageFiles.length < 2;
+  function renderGrid() {
+    imgGrid.innerHTML = '';
+    imageFiles.forEach((item, i) => {
+      const card = document.createElement('div');
+      card.className = 'img-card';
+      card.innerHTML = `
+        <img src="${item.previewUrl}" alt="ref ${i+1}" />
+        <span class="badge">C${i+1}</span>
+        <button class="remove-btn" data-idx="${i}" title="Remove">✕</button>
+        <div class="weight-row">
+          <label>Weight <span class="wv">${item.weight.toFixed(2)}</span></label>
+          <input type="range" min="0.1" max="2" step="0.05" value="${item.weight}" data-idx="${i}" />
+        </div>`;
+      imgGrid.appendChild(card);
     });
-  </script>
+    imgGrid.querySelectorAll('input[type=range]').forEach(sl => {
+      sl.addEventListener('input', function() {
+        const idx = parseInt(this.dataset.idx);
+        imageFiles[idx].weight = parseFloat(this.value);
+        this.closest('.img-card').querySelector('.wv').textContent = imageFiles[idx].weight.toFixed(2);
+      });
+    });
+    imgGrid.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', function() { removeImage(parseInt(this.dataset.idx)); });
+    });
+    imgCount.textContent = `${imageFiles.length} / 6 images`;
+    generateBtn.disabled = imageFiles.length < 2;
+    saveRefBtn.disabled  = imageFiles.length < 2;
+  }
+
+  motionSlider.addEventListener('input', function() { motionVal.textContent = parseFloat(this.value).toFixed(2); });
+
+  // ── Save reference set ────────────────────────────────────────────────────
+  saveRefBtn.addEventListener('click', async () => {
+    const name = refNameInput.value.trim();
+    if (!name) { refNameInput.focus(); return; }
+    if (imageFiles.length < 2) return;
+
+    saveRefBtn.disabled = true;
+    saveRefBtn.textContent = 'Saving…';
+
+    const fd = new FormData();
+    fd.append('name', name);
+    imageFiles.forEach(({ file }) => fd.append('images', file));
+    fd.append('weights', JSON.stringify(imageFiles.map(f => f.weight)));
+    fd.append('prompt', document.getElementById('prompt').value.trim());
+
+    try {
+      const resp = await fetch('/references', { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error(await resp.text());
+      refNameInput.value = '';
+      await loadLibrary();
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    } finally {
+      saveRefBtn.disabled = imageFiles.length < 2;
+      saveRefBtn.textContent = 'Save';
+    }
+  });
+
+  // ── References library ────────────────────────────────────────────────────
+  async function loadLibrary() {
+    const refs = await fetch('/references').then(r => r.json()).catch(() => []);
+    refsEmpty.style.display = refs.length ? 'none' : 'block';
+    // Remove existing ref cards (not the empty-state p)
+    [...refsList.querySelectorAll('.ref-card')].forEach(el => el.remove());
+
+    for (const ref of refs) {
+      const card = document.createElement('div');
+      card.className = 'ref-card';
+      card.dataset.id = ref.id;
+
+      const ts = new Date(ref.created_at).toLocaleDateString('en', { month:'short', day:'numeric' });
+      const thumbsHtml = ref.filenames.slice(0,5).map(fn =>
+        `<img src="/references/${ref.id}/images/${fn}" alt="" />`
+      ).join('');
+
+      card.innerHTML = `
+        <div class="ref-card-top">
+          <span class="ref-card-name">${escHtml(ref.name)}</span>
+          <div class="ref-card-actions">
+            <button class="btn-sm btn-ghost load-btn" data-id="${ref.id}">Load</button>
+            <button class="btn-sm btn-danger del-btn"  data-id="${ref.id}">✕</button>
+          </div>
+        </div>
+        <div class="ref-card-meta">${ref.filenames.length} image${ref.filenames.length>1?'s':''} &middot; ${ts}</div>
+        <div class="ref-thumbs">${thumbsHtml}</div>`;
+
+      card.querySelector('.load-btn').addEventListener('click', e => { e.stopPropagation(); loadRefSet(ref); });
+      card.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); deleteRefSet(ref.id); });
+
+      refsList.insertBefore(card, refsEmpty);
+    }
+  }
+
+  async function loadRefSet(ref) {
+    // Clear existing images
+    imageFiles.forEach(f => URL.revokeObjectURL(f.previewUrl));
+    imageFiles = [];
+
+    for (let i = 0; i < ref.filenames.length; i++) {
+      const url = `/references/${ref.id}/images/${ref.filenames[i]}`;
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const file = new File([blob], ref.filenames[i], { type: blob.type });
+      imageFiles.push({ file, weight: ref.weights[i] ?? 1.0, previewUrl: URL.createObjectURL(blob) });
+    }
+    renderGrid();
+
+    // Pre-fill saved prompt if field is empty
+    const promptEl = document.getElementById('prompt');
+    if (!promptEl.value.trim() && ref.prompt) promptEl.value = ref.prompt;
+
+    // Mark active card
+    document.querySelectorAll('.ref-card').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.ref-card[data-id="${ref.id}"]`)?.classList.add('active');
+  }
+
+  async function deleteRefSet(id) {
+    if (!confirm('Delete this reference set?')) return;
+    await fetch(`/references/${id}`, { method: 'DELETE' });
+    await loadLibrary();
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Generate ──────────────────────────────────────────────────────────────
+  generateBtn.addEventListener('click', startGeneration);
+
+  async function startGeneration() {
+    if (imageFiles.length < 2) return;
+    generateBtn.disabled = true;
+    idlePanel.style.display = 'none';
+    videoPanel.classList.remove('visible');
+    progressPanel.classList.add('visible');
+    logBox.innerHTML = '';
+    processingStartTime = null;
+    etaDisplay.textContent = '—';
+    setStatus('uploading', 'Preparing…');
+    startTimer();
+
+    const fd = new FormData();
+    imageFiles.forEach(({ file }) => fd.append('images', file));
+    fd.append('prompt',          document.getElementById('prompt').value.trim() || 'A cinematic video featuring the referenced characters.');
+    fd.append('negative_prompt', document.getElementById('neg-prompt').value.trim());
+    fd.append('aspect_ratio',    document.getElementById('aspect-ratio').value);
+    fd.append('resolution',      document.getElementById('resolution').value);
+    fd.append('duration',        document.getElementById('duration').value);
+    fd.append('motion_strength', motionSlider.value);
+    fd.append('image_weights',   JSON.stringify(imageFiles.map(f => f.weight)));
+
+    try {
+      const resp = await fetch('/generate', { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+        }
+      }
+    } catch (err) {
+      handleEvent({ status: 'error', message: err.message });
+    }
+  }
+
+  function handleEvent(evt) {
+    const { status, message, video_url, position, prompt_used, progress } = evt;
+
+    // Update deterministic progress bar
+    if (typeof progress === 'number' && progress >= 0) {
+      progressBar.classList.remove('indeterminate');
+      progressBar.style.width = progress + '%';
+    }
+
+    switch (status) {
+      case 'uploading':
+        setStatus('uploading', message);
+        addLog(message);
+        break;
+      case 'submitted':
+        setStatus('queued', message);
+        addLog(message);
+        break;
+      case 'queued':
+        setStatus('queued', position != null ? `Queue position: ${position}` : message);
+        addLog(message);
+        break;
+      case 'processing':
+        if (!processingStartTime) {
+          processingStartTime = Date.now();
+          progressBar.classList.add('indeterminate');
+        }
+        setStatus('processing', 'Generating video…');
+        if (message) addLog(message);
+        break;
+      case 'complete':
+        stopTimer();
+        setStatus('complete', 'Done!');
+        progressBar.classList.remove('indeterminate');
+        progressBar.style.width = '100%';
+        etaDisplay.textContent = '✓';
+        addLog('Video ready!', 'ok');
+        showVideo(video_url, prompt_used);
+        generateBtn.disabled = false;
+        break;
+      case 'error':
+        stopTimer();
+        setStatus('error', 'Error');
+        progressBar.classList.remove('indeterminate');
+        progressBar.style.width = '0%';
+        etaDisplay.textContent = '—';
+        addLog('Error: ' + message, 'err');
+        generateBtn.disabled = false;
+        break;
+    }
+  }
+
+  function setStatus(state, label) {
+    statusBadge.className = `status-badge ${state}`;
+    statusText.textContent = label;
+    const dot = statusBadge.querySelector('.dot');
+    if (state === 'complete' || state === 'error') dot.classList.remove('pulse');
+    else dot.classList.add('pulse');
+  }
+
+  function addLog(msg, type = 'info') {
+    if (!msg) return;
+    const line = document.createElement('div');
+    line.className = `log-line ${type}`;
+    const ts = new Date().toLocaleTimeString('en', { hour12: false });
+    line.textContent = `[${ts}] ${msg}`;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function showVideo(url, promptUsed) {
+    videoPlayer.src = url;
+    videoPlayer.load();
+    videoPlayer.play().catch(() => {});
+    downloadLink.href = url;
+    videoPanel.classList.add('visible');
+    if (promptUsed) {
+      document.getElementById('prompt-used').style.display = 'block';
+      document.getElementById('prompt-used-text').textContent = promptUsed;
+    }
+  }
+
+  resetBtn.addEventListener('click', () => {
+    videoPanel.classList.remove('visible');
+    progressPanel.classList.remove('visible');
+    idlePanel.style.display = '';
+    videoPlayer.src = '';
+    document.getElementById('prompt-used').style.display = 'none';
+    generateBtn.disabled = imageFiles.length < 2;
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadLibrary();
+</script>
 </body>
 </html>
