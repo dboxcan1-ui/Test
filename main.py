@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "wan/v2.6/reference-to-video/flash"
+FAL_ENDPOINT = "fal-ai/wan/v2.1/reference-to-video"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
