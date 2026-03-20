@@ -31,8 +31,8 @@ gpu_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
     .pip_install(
-        "torch==2.4.1",
-        "torchvision==0.19.1",
+        "torch==2.5.1",
+        "torchvision==0.20.1",
         "diffusers>=0.31.0",
         "transformers>=4.45.0",
         "accelerate>=0.34.0",
