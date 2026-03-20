@@ -212,10 +212,9 @@ async def generate(
 
             yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
 
-            # No start_image_url — elements-only mode generates a fresh scene
-            # with the reference character rather than animating from a first frame.
             arguments = {
                 "prompt": full_prompt,
+                "start_image_url": primary_url,
                 "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
                 "aspect_ratio": aspect_ratio,
                 "cfg_scale": cfg_scale,
