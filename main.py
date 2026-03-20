@@ -130,7 +130,7 @@ def _save_prompt(text: str) -> None:
         })
         PROMPTS_FILE.parent.mkdir(parents=True, exist_ok=True)
         PROMPTS_FILE.write_text(json.dumps(prompts[:3], indent=2))
-        _commit_volume()
+        asyncio.get_event_loop().run_in_executor(None, _commit_volume)
     except Exception:
         pass
 
@@ -160,6 +160,7 @@ async def root():
 
 @app.get("/prompts")
 async def get_prompts():
+    await asyncio.to_thread(_reload_volume)
     if not PROMPTS_FILE.exists():
         return []
     try:
@@ -426,10 +427,27 @@ async def generate(
 
                 loop.run_in_executor(None, _run_gen)
 
+                # During Modal cold start the queue is silent for up to several
+                # minutes.  Send a heartbeat every 20 s so the browser knows
+                # the connection is still alive.
+                _HEARTBEAT_S = 20
+                received_first = False
                 while True:
-                    update = await update_queue.get()
+                    try:
+                        update = await asyncio.wait_for(
+                            update_queue.get(), timeout=_HEARTBEAT_S
+                        )
+                    except asyncio.TimeoutError:
+                        if not received_first:
+                            yield sse({
+                                "status":  "submitted",
+                                "message": "Container starting — model loading, please wait…",
+                                "progress": 15,
+                            })
+                        continue
                     if update is None:
                         break
+                    received_first = True
                     if update.get("type") == "error":
                         raise RuntimeError(update["msg"])
                     if update.get("type") == "progress":
