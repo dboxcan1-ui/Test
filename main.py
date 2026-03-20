@@ -41,17 +41,19 @@ app.add_middleware(
 # Locally it falls back to the legacy directories so nothing breaks.
 _DATA_DIR_ENV = os.getenv("DATA_DIR")
 if _DATA_DIR_ENV:
-    DATA_DIR    = Path(_DATA_DIR_ENV)
-    REFS_DIR    = DATA_DIR / "refs"
-    VIDEOS_DIR  = DATA_DIR / "videos"
-    PROMPTS_FILE = DATA_DIR / "prompts.json"
-    LOGS_DIR    = DATA_DIR / "logs"
+    DATA_DIR      = Path(_DATA_DIR_ENV)
+    REFS_DIR      = DATA_DIR / "refs"
+    VIDEOS_DIR    = DATA_DIR / "videos"
+    PROMPTS_FILE  = DATA_DIR / "prompts.json"
+    LOGS_DIR      = DATA_DIR / "logs"
+    LAST_GEN_FILE = DATA_DIR / "last_gen.json"
 else:
-    DATA_DIR    = None
-    REFS_DIR    = Path("refs_store")
-    VIDEOS_DIR  = Path("/tmp/videos")
-    PROMPTS_FILE = Path("prompts.json")
-    LOGS_DIR    = None  # skip logs when running locally without a volume
+    DATA_DIR      = None
+    REFS_DIR      = Path("refs_store")
+    VIDEOS_DIR    = Path("/tmp/videos")
+    PROMPTS_FILE  = Path("prompts.json")
+    LOGS_DIR      = None  # skip logs when running locally without a volume
+    LAST_GEN_FILE = Path("last_gen.json")
 
 REFS_DIR.mkdir(parents=True, exist_ok=True)
 VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -154,6 +156,38 @@ def _write_log(entry: dict) -> None:
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return (Path(__file__).parent / "index.html").read_text()
+
+
+# ── GPU warm status ────────────────────────────────────────────────────────────
+SCALEDOWN_SECONDS = 600  # must match modal_wan.py scaledown_window
+
+
+def _mark_last_gen() -> None:
+    try:
+        LAST_GEN_FILE.write_text(json.dumps({"at": datetime.now(timezone.utc).isoformat()}))
+        asyncio.get_event_loop().run_in_executor(None, _commit_volume)
+    except Exception:
+        pass
+
+
+@app.get("/gpu-status")
+async def gpu_status():
+    await asyncio.to_thread(_reload_volume)
+    if not LAST_GEN_FILE.exists():
+        return {"status": "unknown", "seconds_ago": None}
+    try:
+        data = json.loads(LAST_GEN_FILE.read_text())
+        at = datetime.fromisoformat(data["at"])
+        seconds_ago = int((datetime.now(timezone.utc) - at).total_seconds())
+        if seconds_ago < SCALEDOWN_SECONDS * 0.8:
+            status = "warm"
+        elif seconds_ago < SCALEDOWN_SECONDS:
+            status = "likely_warm"
+        else:
+            status = "cold"
+        return {"status": status, "seconds_ago": seconds_ago}
+    except Exception:
+        return {"status": "unknown", "seconds_ago": None}
 
 
 # ── Prompts endpoint ───────────────────────────────────────────────────────────
@@ -440,6 +474,7 @@ async def generate(
                 # Sync the data volume so we can serve the file immediately
                 await asyncio.to_thread(_reload_volume)
 
+                _mark_last_gen()
                 _save_prompt(prompt)
                 elapsed = (datetime.now(timezone.utc) - gen_start).total_seconds()
                 _write_log({

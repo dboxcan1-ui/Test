@@ -299,6 +299,10 @@
         <option value="wan" selected>WAN 2.6 R2V Flash — permissive, reference-aware</option>
         <option value="kling">Kling 1.6 Standard Elements — high quality (content-filtered)</option>
       </select>
+      <div id="gpu-status-row" style="margin-top:0.4rem;display:flex;align-items:center;gap:0.4rem;font-size:0.72rem;color:var(--text-dim)">
+        <span id="gpu-dot" style="width:7px;height:7px;border-radius:50%;background:var(--text-dim);flex-shrink:0"></span>
+        <span id="gpu-label">Checking GPU status…</span>
+      </div>
     </div>
 
     <div class="field">
@@ -817,9 +821,49 @@
     } catch {}
   }
 
+  // ── GPU warm status ───────────────────────────────────────────────────────
+  const gpuDot   = document.getElementById('gpu-dot');
+  const gpuLabel = document.getElementById('gpu-label');
+  const gpuRow   = document.getElementById('gpu-status-row');
+
+  function fmtAgo(s) {
+    if (s < 60) return `${s}s ago`;
+    return `${Math.floor(s / 60)}m ${s % 60}s ago`;
+  }
+
+  async function refreshGpuStatus() {
+    if (modelSelect.value !== 'wan') { gpuRow.style.display = 'none'; return; }
+    gpuRow.style.display = 'flex';
+    try {
+      const d = await fetch('/gpu-status').then(r => r.json());
+      if (d.status === 'warm') {
+        gpuDot.style.background = 'var(--green)';
+        gpuLabel.textContent = `GPU warm — last run ${fmtAgo(d.seconds_ago)}`;
+      } else if (d.status === 'likely_warm') {
+        gpuDot.style.background = 'var(--yellow)';
+        gpuLabel.textContent = `GPU likely warm — last run ${fmtAgo(d.seconds_ago)}`;
+      } else if (d.status === 'cold') {
+        gpuDot.style.background = 'var(--red)';
+        gpuLabel.textContent = d.seconds_ago != null
+          ? `GPU cold — last run ${fmtAgo(d.seconds_ago)}, expect ~3-5 min`
+          : 'GPU cold — expect ~3-5 min on first run';
+      } else {
+        gpuDot.style.background = 'var(--text-dim)';
+        gpuLabel.textContent = 'GPU status unknown — never run';
+      }
+    } catch {
+      gpuDot.style.background = 'var(--text-dim)';
+      gpuLabel.textContent = 'GPU status unavailable';
+    }
+  }
+
+  modelSelect.addEventListener('change', refreshGpuStatus);
+  setInterval(refreshGpuStatus, 30_000);
+
   // ── Init ──────────────────────────────────────────────────────────────────
   loadLibrary();
   loadRecentPrompts();
+  refreshGpuStatus();
 </script>
 </body>
 </html>
