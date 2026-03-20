@@ -237,6 +237,27 @@
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
+    /* ── Job queue ── */
+    #queue-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .job-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.6rem 0.75rem;
+      display: flex; align-items: center; gap: 0.6rem;
+    }
+    .job-card.active { border-color: var(--accent); }
+    .job-card.done   { border-color: var(--green); }
+    .job-card.err    { border-color: var(--red); }
+    .job-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .job-dot.running { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+    .job-dot.complete { background: var(--green); }
+    .job-dot.error   { background: var(--red); }
+    .job-info { flex: 1; min-width: 0; }
+    .job-model { font-size: 0.68rem; color: var(--text-dim); }
+    .job-prompt { font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .job-msg { font-size: 0.68rem; color: var(--text-dim); margin-top: 1px; }
+    .job-progress { height: 2px; background: var(--border); border-radius: 2px; margin-top: 4px; }
+    .job-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s; }
+
     /* ── Recent prompts ── */
     #recent-prompts-wrap { margin-top: 0.5rem; }
     #recent-prompts-wrap p { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.3rem; }
@@ -405,6 +426,13 @@
       <p style="margin-top:0.9rem;font-size:0.72rem;color:var(--text-dim)" id="idle-model-note">
         WAN 2.6 R2V Flash · 9:16 · 720p · 5s by default<br>Safety checker disabled.
       </p>
+    </div>
+
+    <div class="panel" id="queue-panel">
+      <h2>Job Queue</h2>
+      <div id="queue-list">
+        <p class="empty-state" id="queue-empty">No jobs yet this session.</p>
+      </div>
     </div>
 
   </div>
@@ -654,7 +682,11 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // ── Generate ──────────────────────────────────────────────────────────────
+  // ── Generate (job-based) ──────────────────────────────────────────────────
+  let activeJobId   = null;
+  let pollInterval  = null;
+  let lastLogMsg    = null;
+
   generateBtn.addEventListener('click', startGeneration);
 
   async function startGeneration() {
@@ -664,9 +696,9 @@
     videoPanel.classList.remove('visible');
     progressPanel.classList.add('visible');
     logBox.innerHTML = '';
-    processingStartTime = null;
+    lastLogMsg = null;
     etaDisplay.textContent = '—';
-    setStatus('uploading', 'Preparing…');
+    setStatus('uploading', 'Submitting…');
     startTimer();
 
     const fd = new FormData();
@@ -682,83 +714,73 @@
 
     try {
       const resp = await fetch('/generate', { method: 'POST', body: fd });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      const reader  = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try { handleEvent(JSON.parse(line.slice(6))); } catch {}
-        }
-      }
+      if (!resp.ok) throw new Error(await resp.text());
+      const { job_id } = await resp.json();
+      activeJobId = job_id;
+      localStorage.setItem('activeJobId', job_id);
+      startPolling(job_id);
     } catch (err) {
-      handleEvent({ status: 'error', message: err.message });
+      addLog('Error: ' + err.message, 'err');
+      setStatus('error', 'Error');
+      stopTimer();
+      generateBtn.disabled = false;
     }
   }
 
-  function handleEvent(evt) {
-    const { status, message, video_url, position, prompt_used, progress } = evt;
+  function startPolling(job_id) {
+    clearInterval(pollInterval);
+    pollInterval = setInterval(() => pollJob(job_id), 2000);
+  }
 
-    // Update deterministic progress bar
+  function stopPolling() {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+
+  async function pollJob(job_id) {
+    try {
+      const job = await fetch(`/job/${job_id}`).then(r => r.json());
+      applyJobToUI(job);
+      refreshQueue();
+    } catch { /* network hiccup, keep polling */ }
+  }
+
+  function applyJobToUI(job) {
+    const { status, message, video_url, prompt_used, progress } = job;
+
     if (typeof progress === 'number' && progress >= 0) {
       progressBar.classList.remove('indeterminate');
       progressBar.style.width = progress + '%';
     }
 
-    switch (status) {
-      case 'uploading':
-        setStatus('uploading', message);
-        addLog(message);
-        break;
-      case 'submitted':
-        setStatus('queued', message);
-        addLog(message);
-        break;
-      case 'queued':
-        setStatus('queued', position != null ? `Queue position: ${position}` : message);
-        addLog(message);
-        break;
-      case 'processing':
-        if (!processingStartTime) {
-          processingStartTime = Date.now();
-        }
-        // If we have a real deterministic progress value, drop the animation
-        if (typeof progress === 'number' && progress >= 0) {
-          progressBar.classList.remove('indeterminate');
-        } else if (!processingStartTime) {
-          progressBar.classList.add('indeterminate');
-        }
-        setStatus('processing', 'Generating video…');
-        if (message) addLog(message);
-        break;
-      case 'complete':
-        stopTimer();
-        setStatus('complete', 'Done!');
-        progressBar.classList.remove('indeterminate');
-        progressBar.style.width = '100%';
-        etaDisplay.textContent = '✓';
-        addLog('Video ready!', 'ok');
-        showVideo(video_url, prompt_used);
-        generateBtn.disabled = false;
-        loadRecentPrompts();
-        break;
-      case 'error':
-        stopTimer();
-        setStatus('error', 'Error');
-        progressBar.classList.remove('indeterminate');
-        progressBar.style.width = '0%';
-        etaDisplay.textContent = '—';
-        addLog('Error: ' + message, 'err');
-        generateBtn.disabled = false;
-        break;
+    if (message && message !== lastLogMsg) {
+      addLog(message);
+      lastLogMsg = message;
+    }
+
+    if (status === 'running') {
+      setStatus('processing', 'Generating…');
+      if (!processingStartTime) processingStartTime = Date.now();
+    } else if (status === 'complete') {
+      stopPolling();
+      stopTimer();
+      localStorage.removeItem('activeJobId');
+      setStatus('complete', 'Done!');
+      progressBar.style.width = '100%';
+      etaDisplay.textContent = '✓';
+      addLog('Video ready!', 'ok');
+      showVideo(video_url, prompt_used);
+      generateBtn.disabled = false;
+      loadRecentPrompts();
+      refreshGpuStatus();
+    } else if (status === 'error') {
+      stopPolling();
+      stopTimer();
+      localStorage.removeItem('activeJobId');
+      setStatus('error', 'Error');
+      progressBar.style.width = '0%';
+      etaDisplay.textContent = '—';
+      generateBtn.disabled = false;
     }
   }
 
@@ -860,10 +882,101 @@
   modelSelect.addEventListener('change', refreshGpuStatus);
   setInterval(refreshGpuStatus, 30_000);
 
+  // ── Queue panel ───────────────────────────────────────────────────────────
+  const queueList  = document.getElementById('queue-list');
+  const queueEmpty = document.getElementById('queue-empty');
+
+  function fmtElapsed(isoStart) {
+    const s = Math.floor((Date.now() - new Date(isoStart)) / 1000);
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s/60)}m ${s%60}s`;
+  }
+
+  async function refreshQueue() {
+    try {
+      const jobs = await fetch('/jobs').then(r => r.json());
+      queueEmpty.style.display = jobs.length ? 'none' : 'block';
+      // Remove old cards
+      [...queueList.querySelectorAll('.job-card')].forEach(el => el.remove());
+
+      for (const job of jobs) {
+        const card = document.createElement('div');
+        const isActive = job.status === 'running';
+        card.className = 'job-card' + (isActive ? ' active' : job.status === 'complete' ? ' done' : job.status === 'error' ? ' err' : '');
+        card.dataset.id = job.id;
+
+        const dotClass = job.status === 'running' ? 'running' : job.status === 'complete' ? 'complete' : 'error';
+        const elapsed  = job.completed_at
+          ? `${Math.round(job.elapsed || 0)}s`
+          : fmtElapsed(job.created_at);
+        const metaText = job.status === 'running'
+          ? `Running · ${fmtElapsed(job.created_at)} elapsed`
+          : job.status === 'complete'
+          ? `Done in ${elapsed}`
+          : `Failed · ${fmtElapsed(job.created_at)} ago`;
+
+        const promptPreview = (job.prompt || '').substring(0, 60) + ((job.prompt || '').length > 60 ? '…' : '');
+
+        card.innerHTML = `
+          <span class="job-dot ${dotClass}"></span>
+          <div class="job-info">
+            <div class="job-model">${job.model?.toUpperCase()} · ${job.aspect_ratio || ''} · ${job.duration || ''}s</div>
+            <div class="job-prompt">${escHtml(promptPreview)}</div>
+            <div class="job-msg">${escHtml(job.message || '')}</div>
+            ${isActive ? `<div class="job-progress"><div class="job-progress-bar" style="width:${job.progress||0}%"></div></div>` : ''}
+          </div>
+          ${job.status === 'complete' ? `<button class="btn-sm btn-ghost view-btn" data-id="${job.id}">View</button>` : ''}`;
+
+        if (job.status === 'complete') {
+          card.querySelector('.view-btn').addEventListener('click', () => {
+            idlePanel.style.display = 'none';
+            progressPanel.classList.remove('visible');
+            showVideo(job.video_url, job.prompt_used);
+          });
+        }
+
+        queueList.insertBefore(card, queueEmpty);
+      }
+    } catch {}
+  }
+
+  // Refresh queue every 5s while any job is active, else every 30s
+  setInterval(refreshQueue, 5000);
+
+  // ── Resume active job on page load ────────────────────────────────────────
+  async function resumeActiveJob() {
+    const savedId = localStorage.getItem('activeJobId');
+    if (!savedId) return;
+    try {
+      const job = await fetch(`/job/${savedId}`).then(r => r.json());
+      if (job.status === 'running') {
+        activeJobId = savedId;
+        idlePanel.style.display = 'none';
+        progressPanel.classList.add('visible');
+        progressPanel.querySelector('h2').textContent = 'Generation Progress';
+        logBox.innerHTML = '';
+        lastLogMsg = null;
+        setStatus('processing', 'Resuming…');
+        startTimer();
+        startPolling(savedId);
+      } else if (job.status === 'complete') {
+        localStorage.removeItem('activeJobId');
+        showVideo(job.video_url, job.prompt_used);
+        idlePanel.style.display = 'none';
+      } else {
+        localStorage.removeItem('activeJobId');
+      }
+    } catch {
+      localStorage.removeItem('activeJobId');
+    }
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   loadLibrary();
   loadRecentPrompts();
   refreshGpuStatus();
+  refreshQueue();
+  resumeActiveJob();
 </script>
 </body>
 </html>
