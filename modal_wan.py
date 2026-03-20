@@ -79,7 +79,7 @@ ASPECT_DIMS = {
         str(DATA_DIR):  data_volume,
     },
     timeout=600,
-    scaledown_window=120,
+    scaledown_window=600,
 )
 class WanGenerator:
     @modal.enter()
