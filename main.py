@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "fal-ai/kling-video/o1/standard/reference-to-video"
+FAL_ENDPOINT = "fal-ai/minimax/video-01-subject-reference"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -198,12 +198,7 @@ async def generate(
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
-    # cfg_scale controls how strictly Kling follows the text prompt.
-    # Keep it moderate-to-high so the prompt is actually respected.
-    cfg_scale = max(0.4, min(0.7, 0.4 + motion_strength * 0.3))
-
-    # Kling O1 needs @Element1 in the prompt to anchor the reference character.
-    full_prompt = prompt if "@Element1" in prompt else f"@Element1 {prompt}"
+    full_prompt = prompt
 
     async def event_stream():
         try:
@@ -218,10 +213,8 @@ async def generate(
 
             arguments = {
                 "prompt": full_prompt,
-                "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
-                "aspect_ratio": aspect_ratio,
-                "cfg_scale": cfg_scale,
-                "enable_safety_checker": False,
+                "subject_reference_image_url": primary_url,
+                "prompt_optimizer": False,
             }
 
             result = None
