@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ref2vid — Reference Image to Video</title>
+  <title>ref2vid — Reference to Video</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -241,7 +241,7 @@
 <body>
 <div style="max-width:1100px;margin:0 auto 1.5rem">
   <h1><span>ref2vid</span></h1>
-  <p class="subtitle">Multi-reference image to video via fal.ai</p>
+  <p class="subtitle">Reference image to video via fal.ai</p>
 </div>
 
 <div class="layout">
@@ -257,15 +257,16 @@
     </div>
 
     <div class="panel">
-      <h2>Drop Images (2 – 6)</h2>
+      <h2>Reference Image</h2>
       <div id="drop-zone" role="button" tabindex="0">
         <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
           <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Drop images or <strong>click to browse</strong>
+        Drop an image or <strong>click to browse</strong>
       </div>
       <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/bmp" multiple />
-      <p class="img-count" id="img-count">0 / 6 images</p>
+      <p class="img-count" id="img-count">0 images loaded</p>
+      <p class="hint" style="margin-top:0.4rem">The highest-weight image is used as the reference. Add extras to pick from.</p>
       <div id="image-grid"></div>
 
       <div class="save-ref-row">
@@ -291,8 +292,7 @@
       <label>Prompt</label>
       <textarea id="prompt" rows="4" placeholder="e.g. Character1 walks through a neon-lit Tokyo street at night, cinematic motion"></textarea>
       <p class="hint" id="prompt-hint">
-        Use <code>Character1</code>, <code>Character2</code>… to reference your images (sorted by weight).<br>
-        They are auto-injected if omitted.
+        Use <code>Character1</code> to reference your image. Auto-injected if omitted.
       </p>
     </div>
 
@@ -377,11 +377,10 @@
     <div class="panel" id="idle-panel">
       <h2>How it works</h2>
       <ol>
-        <li>Load a saved reference set <em>or</em> drop 2–6 images</li>
-        <li>Adjust per-image weights (highest = Character1)</li>
-        <li>Write a prompt using <code>Character1</code>, <code>Character2</code>…</li>
+        <li>Load a saved reference <em>or</em> drop an image</li>
+        <li>Write a prompt — <code>Character1</code> is auto-injected</li>
         <li>Hit <strong>Generate Video</strong></li>
-        <li>Save image sets to the library for quick reuse</li>
+        <li>Save images to the library for quick reuse</li>
       </ol>
       <p style="margin-top:0.9rem;font-size:0.72rem;color:var(--text-dim)" id="idle-model-note">
         WAN 2.6 R2V Flash · 9:16 · 720p · 5s by default<br>Safety checker disabled.
@@ -429,8 +428,8 @@
   };
 
   const PROMPT_HINTS = {
-    wan:   `Use <code>Character1</code>, <code>Character2</code>… to reference your images (sorted by weight).<br>They are auto-injected if omitted.`,
-    kling: `Use <code>@Element1</code>, <code>@Element2</code>… to reference your images (sorted by weight).<br>They are auto-injected if omitted. <span style="color:var(--yellow)">⚠ Kling enforces content policy at the model level.</span>`,
+    wan:   `Use <code>Character1</code> to reference your image. Auto-injected if omitted.`,
+    kling: `Use <code>@Element1</code> to reference your image. Auto-injected if omitted. <span style="color:var(--yellow)">⚠ Kling enforces content policy at the model level.</span>`,
   };
 
   const MODEL_NOTES = {
@@ -514,7 +513,7 @@
       card.className = 'img-card';
       card.innerHTML = `
         <img src="${item.previewUrl}" alt="ref ${i+1}" />
-        <span class="badge">C${i+1}</span>
+        <span class="badge">${i + 1}</span>
         <button class="remove-btn" data-idx="${i}" title="Remove">✕</button>
         <div class="weight-row">
           <label>Weight <span class="wv">${item.weight.toFixed(2)}</span></label>
@@ -532,8 +531,8 @@
     imgGrid.querySelectorAll('.remove-btn').forEach(btn => {
       btn.addEventListener('click', function() { removeImage(parseInt(this.dataset.idx)); });
     });
-    imgCount.textContent = `${imageFiles.length} / 6 images`;
-    generateBtn.disabled = imageFiles.length < 2;
+    imgCount.textContent = `${imageFiles.length} image${imageFiles.length !== 1 ? 's' : ''} loaded`;
+    generateBtn.disabled = imageFiles.length < 1;
     saveRefBtn.disabled  = imageFiles.length < 2;
   }
 
@@ -639,7 +638,7 @@
   generateBtn.addEventListener('click', startGeneration);
 
   async function startGeneration() {
-    if (imageFiles.length < 2) return;
+    if (imageFiles.length < 1) return;
     generateBtn.disabled = true;
     idlePanel.style.display = 'none';
     videoPanel.classList.remove('visible');

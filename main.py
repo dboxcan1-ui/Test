@@ -233,6 +233,7 @@ async def generate(
                 fal_endpoint = "fal-ai/kling-video/v1.6/standard/elements"
                 arguments = {
                     "prompt": full_prompt,
+                    "negative_prompt": negative_prompt,
                     "input_image_urls": [primary_url],
                     "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
                     "aspect_ratio": aspect_ratio,
@@ -244,6 +245,7 @@ async def generate(
                 fal_endpoint = "wan/v2.6/reference-to-video/flash"
                 arguments = {
                     "prompt": full_prompt,
+                    "negative_prompt": negative_prompt,
                     "image_urls": [primary_url],
                     "aspect_ratio": aspect_ratio,
                     "resolution": resolution,
