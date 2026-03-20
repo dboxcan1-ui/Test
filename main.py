@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "fal-ai/kling-video/v1.6/standard/elements"
+FAL_ENDPOINT = "wan/v2.6/reference-to-video/flash"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -198,8 +198,18 @@ async def generate(
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
-    cfg_scale = max(0.5, min(1.0, 0.5 + motion_strength * 0.5))
-    full_prompt = prompt if "@Element1" in prompt else f"@Element1 {prompt}"
+    if motion_strength < 0.3:
+        motion_tag = " Subtle, gentle motion."
+    elif motion_strength < 0.6:
+        motion_tag = " Smooth, natural motion."
+    elif motion_strength < 0.85:
+        motion_tag = " Dynamic, expressive motion."
+    else:
+        motion_tag = " Highly dynamic, energetic motion."
+
+    # WAN references characters as Character1, Character2, etc.
+    full_prompt = prompt if "Character1" in prompt else f"Character1 {prompt}"
+    full_prompt += motion_tag
 
     async def event_stream():
         try:
@@ -214,11 +224,14 @@ async def generate(
 
             arguments = {
                 "prompt": full_prompt,
-                "input_image_urls": [primary_url],
-                "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
+                "image_urls": [primary_url],
                 "aspect_ratio": aspect_ratio,
-                "cfg_scale": cfg_scale,
+                "resolution": resolution,
+                "duration": int(duration),
                 "enable_safety_checker": False,
+                "enable_prompt_expansion": False,
+                "multi_shots": False,
+                "enable_audio": False,
             }
 
             result = None
