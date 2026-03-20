@@ -51,21 +51,6 @@ gpu_image = (
     )
 )
 
-# ── Web image ─────────────────────────────────────────────────────────────────
-web_image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .pip_install(
-        "fastapi>=0.115.0",
-        "uvicorn[standard]",
-        "python-multipart",
-        "Pillow>=10.0.0",
-        "fal-client>=0.5.0",
-        "modal>=0.73.0",
-        "python-dotenv",
-    )
-    .add_local_file("main.py",    "/app/main.py")
-    .add_local_file("index.html", "/app/index.html")
-)
 
 # ── Aspect ratio → Phantom --size (WxH) ──────────────────────────────────────
 ASPECT_SIZES = {
@@ -217,33 +202,3 @@ class WanGenerator:
         return video_id
 
 
-# ── Web endpoint ──────────────────────────────────────────────────────────────
-@app.function(
-    image=web_image,
-    volumes={str(DATA_DIR): data_volume},
-    secrets=_dotenv_secrets,
-    timeout=900,
-    scaledown_window=60,
-)
-@modal.concurrent(max_inputs=20)
-@modal.asgi_app()
-def web():
-    import os
-    import sys
-
-    sys.path.insert(0, "/app")
-
-    os.environ["DATA_DIR"] = str(DATA_DIR)
-
-    import main as _main
-
-    _main._volume = data_volume
-
-    _main.DATA_DIR     = DATA_DIR
-    _main.REFS_DIR     = DATA_DIR / "refs"
-    _main.VIDEOS_DIR   = DATA_DIR / "videos"
-    _main.PROMPTS_FILE = DATA_DIR / "prompts.json"
-    _main.REFS_DIR.mkdir(parents=True, exist_ok=True)
-    _main.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-
-    return _main.app
