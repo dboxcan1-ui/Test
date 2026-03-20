@@ -214,6 +214,7 @@ async def generate(
 
             arguments = {
                 "prompt": full_prompt,
+                "input_image_urls": [primary_url],
                 "elements": [{"frontal_image_url": primary_url, "reference_image_urls": [primary_url]}],
                 "aspect_ratio": aspect_ratio,
                 "cfg_scale": cfg_scale,
