@@ -403,67 +403,38 @@ async def generate(
                 yield sse({"status": "submitted", "message": "Submitting to Modal — container may need a moment to start…", "progress": 15})
 
                 WanGenerator = modal.Cls.from_name("ref2vid-wan", "WanGenerator")
-                video_id = None
 
-                # Bridge the synchronous Modal generator into async using a
-                # thread + asyncio.Queue so we can yield SSE events as steps arrive.
-                update_queue: asyncio.Queue = asyncio.Queue()
+                # Run the blocking .remote() call in a thread so the event loop
+                # can keep sending SSE heartbeats while the Modal container
+                # cold-starts and runs inference (can take several minutes).
                 loop = asyncio.get_event_loop()
+                result_future: asyncio.Future = loop.run_in_executor(
+                    None,
+                    lambda: WanGenerator().generate.remote(
+                        compressed,
+                        full_prompt,
+                        negative_prompt,
+                        aspect_ratio,
+                        int(duration),
+                    ),
+                )
 
-                def _run_gen():
-                    try:
-                        for _upd in WanGenerator().generate.remote_gen(
-                            compressed,
-                            full_prompt,
-                            negative_prompt,
-                            aspect_ratio,
-                            int(duration),
-                        ):
-                            loop.call_soon_threadsafe(update_queue.put_nowait, _upd)
-                    except Exception as _exc:
-                        loop.call_soon_threadsafe(update_queue.put_nowait, {"type": "error", "msg": str(_exc)})
-                    finally:
-                        loop.call_soon_threadsafe(update_queue.put_nowait, None)  # sentinel
-
-                loop.run_in_executor(None, _run_gen)
-
-                # During Modal cold start the queue is silent for up to several
-                # minutes.  Send a heartbeat every 20 s so the browser knows
-                # the connection is still alive.
+                # Heartbeat every 20 s so the browser connection stays alive.
                 _HEARTBEAT_S = 20
-                received_first = False
-                while True:
+                while not result_future.done():
                     try:
-                        update = await asyncio.wait_for(
-                            update_queue.get(), timeout=_HEARTBEAT_S
+                        await asyncio.wait_for(
+                            asyncio.shield(result_future), timeout=_HEARTBEAT_S
                         )
                     except asyncio.TimeoutError:
-                        if not received_first:
-                            yield sse({
-                                "status":  "submitted",
-                                "message": "Container starting — model loading, please wait…",
-                                "progress": 15,
-                            })
-                        continue
-                    if update is None:
-                        break
-                    received_first = True
-                    if update.get("type") == "error":
-                        raise RuntimeError(update["msg"])
-                    if update.get("type") == "progress":
-                        step  = update["step"]
-                        total = update["total"]
-                        # Scale 20 → 95 % across the inference steps
-                        pct = 20 + int((step / total) * 75)
                         yield sse({
-                            "status":  "processing",
-                            "message": f"Step {step}/{total}",
-                            "progress": pct,
+                            "status":  "submitted",
+                            "message": "Container starting / running inference — please wait…",
+                            "progress": 15,
                         })
-                    elif update.get("type") == "done":
-                        video_id = update["video_id"]
 
-                if video_id is None:
+                video_id = result_future.result()  # raises if the remote call failed
+                if not video_id:
                     raise RuntimeError("No video returned from GPU container.")
 
                 # Sync the data volume so we can serve the file immediately
