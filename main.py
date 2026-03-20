@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "fal-ai/vidu/q1/reference-to-video"
+FAL_ENDPOINT = "fal-ai/kling-video/o1/standard/reference-to-video"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -198,14 +198,12 @@ async def generate(
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
-    if motion_strength < 0.3:
-        movement_amplitude = "small"
-    elif motion_strength < 0.7:
-        movement_amplitude = "auto"
-    else:
-        movement_amplitude = "large"
+    # cfg_scale controls how strictly Kling follows the text prompt.
+    # Keep it moderate-to-high so the prompt is actually respected.
+    cfg_scale = max(0.4, min(0.7, 0.4 + motion_strength * 0.3))
 
-    full_prompt = prompt
+    # Kling O1 needs @Element1 in the prompt to anchor the reference character.
+    full_prompt = prompt if "@Element1" in prompt else f"@Element1 {prompt}"
 
     async def event_stream():
         try:
@@ -218,11 +216,13 @@ async def generate(
 
             yield sse({"status": "submitted", "message": "Image uploaded. Submitting to fal.ai…", "progress": 20})
 
+            # One element = one character. Passing multiple images caused
+            # Kling to render each as a separate person in the scene.
             arguments = {
                 "prompt": full_prompt,
-                "reference_image_urls": [primary_url],
+                "elements": [{"frontal_image_url": primary_url}],
                 "aspect_ratio": aspect_ratio,
-                "movement_amplitude": movement_amplitude,
+                "cfg_scale": cfg_scale,
             }
 
             result = None
