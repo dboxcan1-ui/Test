@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "wan/v2.6/reference-to-video/flash"
+FAL_ENDPOINT = "fal-ai/vidu/q1/reference-to-video"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -172,20 +172,13 @@ async def generate(
     sorted_weights, sorted_images = zip(*image_pairs)
 
     if motion_strength < 0.3:
-        motion_tag = " Subtle, gentle motion."
-    elif motion_strength < 0.6:
-        motion_tag = " Smooth, natural motion."
-    elif motion_strength < 0.85:
-        motion_tag = " Dynamic, expressive motion."
+        movement_amplitude = "small"
+    elif motion_strength < 0.7:
+        movement_amplitude = "auto"
     else:
-        motion_tag = " Highly dynamic, energetic motion with strong movement."
+        movement_amplitude = "large"
 
-    char_refs = [f"Character{i+1}" for i in range(len(sorted_images))]
     full_prompt = prompt
-    if not any(c in prompt for c in char_refs):
-        ref_str = ", ".join(char_refs[:len(sorted_images)])
-        full_prompt = f"Featuring {ref_str}. {prompt}"
-    full_prompt += motion_tag
 
     async def event_stream():
         try:
@@ -203,15 +196,9 @@ async def generate(
 
             arguments = {
                 "prompt": full_prompt,
-                "image_urls": image_urls,
+                "reference_image_urls": image_urls,
                 "aspect_ratio": aspect_ratio,
-                "resolution": resolution,
-                "duration": int(duration),
-                "negative_prompt": negative_prompt,
-                "enable_safety_checker": False,
-                "enable_prompt_expansion": False,
-                "multi_shots": False,
-                "enable_audio": False,
+                "movement_amplitude": movement_amplitude,
             }
 
             result = None
