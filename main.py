@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FAL_ENDPOINT = "fal-ai/vidu/q1/reference-to-video"
+FAL_ENDPOINT = "fal-ai/kling-video/o1/standard/reference-to-video"
 REFS_DIR = Path("refs_store")
 REFS_DIR.mkdir(exist_ok=True)
 
@@ -171,14 +171,16 @@ async def generate(
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
 
-    if motion_strength < 0.3:
-        movement_amplitude = "small"
+    if motion_strength < 0.4:
+        cfg_scale = 0.3
     elif motion_strength < 0.7:
-        movement_amplitude = "auto"
+        cfg_scale = 0.5
     else:
-        movement_amplitude = "large"
+        cfg_scale = 0.7
 
     full_prompt = prompt
+    if "@Element1" not in prompt:
+        full_prompt = f"@Element1 {prompt}"
 
     async def event_stream():
         try:
@@ -194,11 +196,15 @@ async def generate(
 
             yield sse({"status": "submitted", "message": "All images uploaded. Submitting to fal.ai…", "progress": 20})
 
+            element = {"frontal_image_url": image_urls[0]}
+            if len(image_urls) > 1:
+                element["reference_image_urls"] = image_urls[1:]
+
             arguments = {
                 "prompt": full_prompt,
-                "reference_image_urls": image_urls,
+                "elements": [element],
                 "aspect_ratio": aspect_ratio,
-                "movement_amplitude": movement_amplitude,
+                "cfg_scale": cfg_scale,
             }
 
             result = None
