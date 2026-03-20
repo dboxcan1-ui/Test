@@ -70,6 +70,46 @@ ASPECT_DIMS = {
 }
 
 
+# ── Model download (run once: modal run modal_wan.py::download_model) ─────────
+@app.function(
+    image=gpu_image,
+    volumes={str(MODEL_DIR): model_volume},
+    timeout=3600,
+)
+def download_model():
+    """Download WAN model weights into the persistent volume.
+
+    Run once before first inference:
+        modal run modal_wan.py::download_model
+    """
+    import shutil
+    from huggingface_hub import snapshot_download
+
+    model_path = MODEL_DIR / MODEL_SUBDIR
+    model_volume.reload()
+
+    if (model_path / "model_index.json").exists():
+        print(f"Model already present at {model_path}, skipping download.")
+        return
+
+    # Remove any partial download so we start clean
+    if model_path.exists():
+        print(f"Removing incomplete download at {model_path}")
+        shutil.rmtree(model_path)
+
+    print(f"Downloading {MODEL_ID} → {model_path}")
+    snapshot_download(repo_id=MODEL_ID, local_dir=str(model_path))
+
+    if not (model_path / "model_index.json").exists():
+        raise RuntimeError(
+            f"snapshot_download completed but model_index.json is missing in {model_path}. "
+            "The repo layout may have changed; check the HuggingFace repo."
+        )
+
+    model_volume.commit()
+    print("Download complete and committed to volume.")
+
+
 # ── WanGenerator ─────────────────────────────────────────────────────────────
 @app.cls(
     gpu="A100-40GB",
@@ -84,13 +124,30 @@ ASPECT_DIMS = {
 class WanGenerator:
     @modal.enter()
     def load(self):
+        import shutil
         import torch
         from diffusers import WanImageToVideoPipeline
         from huggingface_hub import snapshot_download
 
         model_path = MODEL_DIR / MODEL_SUBDIR
+
+        # Reload so this container sees the latest committed volume state
+        # (another container may have downloaded and committed since we started)
+        model_volume.reload()
+
         if not (model_path / "model_index.json").exists():
+            # Remove any partial download left by a previous failed attempt
+            if model_path.exists():
+                shutil.rmtree(model_path)
+
             snapshot_download(repo_id=MODEL_ID, local_dir=str(model_path))
+
+            if not (model_path / "model_index.json").exists():
+                raise RuntimeError(
+                    f"snapshot_download finished but {model_path}/model_index.json is missing. "
+                    "Run `modal run modal_wan.py::download_model` to pre-populate the volume."
+                )
+
             model_volume.commit()
 
         self.pipe = WanImageToVideoPipeline.from_pretrained(
