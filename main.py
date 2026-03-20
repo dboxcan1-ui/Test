@@ -223,8 +223,6 @@ async def generate(
                 "reference_image_urls": [primary_url],
                 "aspect_ratio": aspect_ratio,
                 "movement_amplitude": movement_amplitude,
-                "duration": int(duration),
-                "resolution": resolution,
             }
 
             result = None
