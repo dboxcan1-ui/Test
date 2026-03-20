@@ -184,6 +184,8 @@ async def generate(
     motion_strength: float = Form(default=0.5),
     model: str = Form(default="wan"),
 ):
+    use_kling = model == "kling"
+
     if use_kling and not os.getenv("FAL_KEY"):
         async def err():
             yield sse({"status": "error", "message": "FAL_KEY not set. Required for Kling model."})
@@ -208,8 +210,6 @@ async def generate(
 
     image_pairs = sorted(zip(weights, images), key=lambda x: x[0], reverse=True)
     sorted_weights, sorted_images = zip(*image_pairs)
-
-    use_kling = model == "kling"
 
     if motion_strength < 0.3:
         motion_tag = " Subtle, gentle motion."
